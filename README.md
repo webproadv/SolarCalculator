@@ -20,7 +20,7 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `APIFY_API_TOKEN` | Lookup ragione sociale/indirizzo da Partita IVA tramite l'actor Apify `dltik/italy-company-registry-scraper` (Registro Imprese/VIES) — fonte preferita | Se assente, si usa `OPENAPI_KEY` come alternativa |
 | `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
-| `ANTHROPIC_MODEL` | Facoltativa, default `claude-3-5-sonnet-latest` | — |
+| `ANTHROPIC_MODEL` | Facoltativa, default `claude-haiku-4-5-20251001` (rapido ed economico, sufficiente per leggere un grafico a barre) | — |
 
 Nessuna chiave è inclusa nel repository: vanno impostate separatamente da chi effettua il deploy.
 
