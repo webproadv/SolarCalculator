@@ -16,8 +16,9 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 
 | Variabile | Serve per | Senza di essa |
 |---|---|---|
-| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights) | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
-| `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
+| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights) **e** geocodifica indirizzo→lat/lng (Google Geocoding API, stessa chiave: va abilitata anche questa API sul progetto) | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
+| `APIFY_API_TOKEN` | Lookup ragione sociale/indirizzo da Partita IVA tramite l'actor Apify `dltik/italy-company-registry-scraper` (Registro Imprese/VIES) — fonte preferita | Se assente, si usa `OPENAPI_KEY` come alternativa |
+| `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
 | `ANTHROPIC_MODEL` | Facoltativa, default `claude-3-5-sonnet-latest` | — |
 
@@ -32,7 +33,7 @@ npm run dev
 
 ## Note tecniche
 
-- Next.js 14 (App Router), nessuna dipendenza UI esterna — CSS puro, grafici SVG fatti a mano.
+- Next.js 16 (App Router), nessuna dipendenza UI esterna — CSS puro, grafici SVG fatti a mano.
 - Le formule di dimensionamento ed economiche sono in `lib/calc.js`, documentate inline.
 - Le chiamate alle fonti esterne sono centralizzate in `lib/sources.js`.
 - Tariffe GSE (0,0475 €/kWh, valore ufficiale ARERA 2026) e CER (0,075 €/kWh, stima media) sono default configurabili in `lib/calc.js` — non hard-coded nel senso stretto, ma non ancora esposte come impostazione utente in UI (prossimo passo naturale).

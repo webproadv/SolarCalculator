@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { lookupCompany } from "../../../lib/sources";
 
-// Lookup dati aziendali da Partita IVA tramite OpenAPI.com
-// (https://openapi.com — endpoint "Italian Registered Office Address").
-// Se OPENAPI_KEY non è configurata, ritorna dati di esempio (demo:true)
-// così il flusso resta testabile end-to-end senza credenziali.
+// Lookup dati aziendali da Partita IVA. Ordine di preferenza (vedi lib/sources.js):
+// 1) Apify (actor dltik/italy-company-registry-scraper su Registro Imprese/VIES)
+//    se APIFY_API_TOKEN è configurato;
+// 2) OpenAPI.com (https://openapi.com) se OPENAPI_KEY è configurato;
+// 3) dati di esempio (demo:true), così il flusso resta testabile end-to-end
+//    senza credenziali.
 export async function POST(req) {
   const { piva } = await req.json();
 

@@ -180,7 +180,7 @@ export default function Page() {
                 <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
                   {company.demo && (
                     <div className="info-box">
-                      Dati di esempio: nessuna chiave OPENAPI_KEY configurata su questa istanza. In produzione qui comparirebbero i dati reali dell&apos;azienda.
+                      Dati di esempio: nessuna fonte configurata su questa istanza (APIFY_API_TOKEN o OPENAPI_KEY). In produzione qui comparirebbero i dati reali dell&apos;azienda.
                     </div>
                   )}
                   <div className="field">
