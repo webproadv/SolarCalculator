@@ -4,6 +4,30 @@ import { useState, useRef } from "react";
 
 const STEPS = ["Azienda", "Bolletta", "Consumi", "Risultati"];
 
+const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+
+// Somma i kWh per fascia da una tabella di consumi mensili (12 righe {f1,f2,f3}).
+function monthlyTotals(monthly) {
+  const sums = monthly.reduce(
+    (acc, m) => ({
+      f1: acc.f1 + (Number(m.f1) || 0),
+      f2: acc.f2 + (Number(m.f2) || 0),
+      f3: acc.f3 + (Number(m.f3) || 0),
+    }),
+    { f1: 0, f2: 0, f3: 0 }
+  );
+  return { ...sums, total: sums.f1 + sums.f2 + sums.f3 };
+}
+
+// Percentuali F1/F2/F3 (sommano sempre a 100) dai totali annui per fascia.
+function pctFromTotals({ f1, f2, f3 }) {
+  const total = f1 + f2 + f3;
+  if (!total) return { f1: 34, f2: 33, f3: 33 };
+  const pf1 = Math.round((f1 / total) * 100);
+  const pf2 = Math.round((f2 / total) * 100);
+  return { f1: pf1, f2: pf2, f3: 100 - pf1 - pf2 };
+}
+
 export default function Page() {
   const [step, setStep] = useState(0);
 
@@ -21,6 +45,11 @@ export default function Page() {
   const [ocrNote, setOcrNote] = useState("");
   const [preview, setPreview] = useState(null);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
+  // Step 2 — inserimento manuale dei consumi mensili (alternativa alla foto)
+  const [bollettaMode, setBollettaMode] = useState("foto"); // "foto" | "manuale"
+  const [monthly, setMonthly] = useState(MESI.map(() => ({ f1: "", f2: "", f3: "" })));
 
   // Step 3 — consumi
   const [spesaAnnua, setSpesaAnnua] = useState("");
@@ -129,6 +158,17 @@ export default function Page() {
     }
   }
 
+  function updateMonthly(i, key, value) {
+    setMonthly((prev) => {
+      const next = [...prev];
+      next[i] = { ...next[i], [key]: value };
+      return next;
+    });
+  }
+
+  const monthlyTotalsCalc = monthlyTotals(monthly);
+  const monthlyPctCalc = pctFromTotals(monthlyTotalsCalc);
+
   return (
     <>
       <div className="topnav">
@@ -219,61 +259,159 @@ export default function Page() {
 
           {step === 1 && (
             <div className="card">
-              <h3>Foto bolletta (fasce F1/F2/F3)</h3>
-              <p className="card-note">Carica una foto del grafico dei consumi in fascia, oppure imposta le percentuali manualmente.</p>
+              <h3>Consumi in fascia (F1/F2/F3)</h3>
+              <p className="card-note">Carica una foto della bolletta per la lettura automatica, oppure inserisci i consumi mensili manualmente.</p>
 
-              <div
-                className="dropzone"
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  onBollettaUpload(e.dataTransfer.files?.[0]);
-                }}
-              >
-                {preview ? (
-                  <img src={preview} alt="Anteprima bolletta caricata" />
-                ) : (
-                  <p>Trascina qui la foto della bolletta, o clicca per scegliere un file</p>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => onBollettaUpload(e.target.files?.[0])}
-                />
+              <div className="mode-tabs">
+                <button
+                  type="button"
+                  className={`mode-tab ${bollettaMode === "foto" ? "active" : ""}`}
+                  onClick={() => setBollettaMode("foto")}
+                >
+                  📷 Foto bolletta
+                </button>
+                <button
+                  type="button"
+                  className={`mode-tab ${bollettaMode === "manuale" ? "active" : ""}`}
+                  onClick={() => setBollettaMode("manuale")}
+                >
+                  ✍️ Inserisci manualmente
+                </button>
               </div>
-              {ocrLoading && <p className="hint">Lettura del grafico in corso…</p>}
-              {ocrNote && <div className="info-box" style={{ marginTop: 12 }}>{ocrNote}</div>}
 
-              <div style={{ marginTop: 22 }}>
-                <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 12 }}>
-                  Ripartizione consumi per fascia
-                </label>
-                <div className="fascia-row">
-                  <span className="seg-swatch" style={{ background: "var(--c-f1)" }} />
-                  <label>F1 — punta</label>
-                  <input type="range" min="0" max="100" value={f1Pct} onChange={(e) => onFasciaChange("f1", e.target.value)} />
-                  <span className="val mono">{f1Pct}%</span>
-                </div>
-                <div className="fascia-row">
-                  <span className="seg-swatch" style={{ background: "var(--c-f2)" }} />
-                  <label>F2 — intermedia</label>
-                  <input type="range" min="0" max="100" value={f2Pct} onChange={(e) => onFasciaChange("f2", e.target.value)} />
-                  <span className="val mono">{f2Pct}%</span>
-                </div>
-                <div className="fascia-row">
-                  <span className="seg-swatch" style={{ background: "var(--c-f3)" }} />
-                  <label>F3 — fuori punta</label>
-                  <input type="range" min="0" max="100" value={f3Pct} onChange={(e) => onFasciaChange("f3", e.target.value)} />
-                  <span className="val mono">{f3Pct}%</span>
-                </div>
-              </div>
+              {bollettaMode === "foto" ? (
+                <>
+                  <div className="upload-actions">
+                    <button type="button" className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
+                      📁 Carica foto
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => cameraInputRef.current?.click()}>
+                      📸 Scatta foto
+                    </button>
+                  </div>
+
+                  <div
+                    className="dropzone"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      onBollettaUpload(e.dataTransfer.files?.[0]);
+                    }}
+                  >
+                    {preview ? (
+                      <img src={preview} alt="Anteprima bolletta caricata" />
+                    ) : (
+                      <p>Trascina qui la foto della bolletta, o clicca per scegliere un file</p>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => onBollettaUpload(e.target.files?.[0])}
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={(e) => onBollettaUpload(e.target.files?.[0])}
+                  />
+
+                  {ocrLoading && <p className="hint">Lettura del grafico in corso…</p>}
+                  {ocrNote && <div className="info-box" style={{ marginTop: 12 }}>{ocrNote}</div>}
+
+                  <div style={{ marginTop: 22 }}>
+                    <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 12 }}>
+                      Ripartizione consumi per fascia
+                    </label>
+                    <div className="fascia-row">
+                      <span className="seg-swatch" style={{ background: "var(--c-f1)" }} />
+                      <label>F1 — punta</label>
+                      <input type="range" min="0" max="100" value={f1Pct} onChange={(e) => onFasciaChange("f1", e.target.value)} />
+                      <span className="val mono">{f1Pct}%</span>
+                    </div>
+                    <div className="fascia-row">
+                      <span className="seg-swatch" style={{ background: "var(--c-f2)" }} />
+                      <label>F2 — intermedia</label>
+                      <input type="range" min="0" max="100" value={f2Pct} onChange={(e) => onFasciaChange("f2", e.target.value)} />
+                      <span className="val mono">{f2Pct}%</span>
+                    </div>
+                    <div className="fascia-row">
+                      <span className="seg-swatch" style={{ background: "var(--c-f3)" }} />
+                      <label>F3 — fuori punta</label>
+                      <input type="range" min="0" max="100" value={f3Pct} onChange={(e) => onFasciaChange("f3", e.target.value)} />
+                      <span className="val mono">{f3Pct}%</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="hint" style={{ marginBottom: 14 }}>
+                    Inserisci i kWh consumati per fascia in ciascun mese (dati disponibili in bolletta o nel portale del fornitore).
+                  </p>
+                  <div className="mensile-table-wrap">
+                    <table className="mensile-table">
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left" }}>Mese</th>
+                          <th><span className="seg-swatch" style={{ background: "var(--c-f1)" }} />F1</th>
+                          <th><span className="seg-swatch" style={{ background: "var(--c-f2)" }} />F2</th>
+                          <th><span className="seg-swatch" style={{ background: "var(--c-f3)" }} />F3</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {MESI.map((mese, i) => (
+                          <tr key={mese}>
+                            <td>{mese}</td>
+                            <td>
+                              <input type="number" min="0" inputMode="numeric" placeholder="0" value={monthly[i].f1} onChange={(e) => updateMonthly(i, "f1", e.target.value)} />
+                            </td>
+                            <td>
+                              <input type="number" min="0" inputMode="numeric" placeholder="0" value={monthly[i].f2} onChange={(e) => updateMonthly(i, "f2", e.target.value)} />
+                            </td>
+                            <td>
+                              <input type="number" min="0" inputMode="numeric" placeholder="0" value={monthly[i].f3} onChange={(e) => updateMonthly(i, "f3", e.target.value)} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mensile-totals">
+                    <StatMini v={`${monthlyTotalsCalc.f1.toLocaleString("it-IT")} kWh`} l="Totale F1" />
+                    <StatMini v={`${monthlyTotalsCalc.f2.toLocaleString("it-IT")} kWh`} l="Totale F2" />
+                    <StatMini v={`${monthlyTotalsCalc.f3.toLocaleString("it-IT")} kWh`} l="Totale F3" />
+                    <StatMini v={`${monthlyTotalsCalc.total.toLocaleString("it-IT")} kWh`} l="Totale annuo" />
+                  </div>
+                  {monthlyTotalsCalc.total > 0 && (
+                    <p className="hint" style={{ marginTop: 10 }}>
+                      Ripartizione calcolata: F1 {monthlyPctCalc.f1}% · F2 {monthlyPctCalc.f2}% · F3 {monthlyPctCalc.f3}%
+                    </p>
+                  )}
+                </>
+              )}
 
               <div className="btn-row">
                 <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
-                <button className="btn btn-primary" onClick={() => setStep(2)}>Continua →</button>
+                <button
+                  className="btn btn-primary"
+                  disabled={bollettaMode === "manuale" && monthlyTotalsCalc.total === 0}
+                  onClick={() => {
+                    if (bollettaMode === "manuale") {
+                      setF1Pct(monthlyPctCalc.f1);
+                      setF2Pct(monthlyPctCalc.f2);
+                      setF3Pct(monthlyPctCalc.f3);
+                      setConsumoAnnuoKwh(String(Math.round(monthlyTotalsCalc.total)));
+                    }
+                    setStep(2);
+                  }}
+                >
+                  Continua →
+                </button>
               </div>
             </div>
           )}
@@ -289,7 +427,10 @@ export default function Page() {
               <div className="field">
                 <label>Consumo annuo (kWh)</label>
                 <input type="number" min="0" placeholder="es. 180000" value={consumoAnnuoKwh} onChange={(e) => setConsumoAnnuoKwh(e.target.value)} />
-                <p className="hint">Prezzo medio stimato: {spesaAnnua && consumoAnnuoKwh ? `€ ${(Number(spesaAnnua) / Number(consumoAnnuoKwh)).toFixed(3)}/kWh` : "—"}</p>
+                <p className="hint">
+                  {bollettaMode === "manuale" && "Calcolato dalla tabella mensile inserita — puoi correggerlo. "}
+                  Prezzo medio stimato: {spesaAnnua && consumoAnnuoKwh ? `€ ${(Number(spesaAnnua) / Number(consumoAnnuoKwh)).toFixed(3)}/kWh` : "—"}
+                </p>
               </div>
               {quoteError && <div className="error-box">{quoteError}</div>}
               <div className="btn-row">
