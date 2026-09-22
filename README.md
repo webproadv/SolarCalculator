@@ -24,6 +24,19 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 
 Nessuna chiave è inclusa nel repository: vanno impostate separatamente da chi effettua il deploy.
 
+## Foto satellitare e simulazione pannelli sul tetto
+
+In dashboard, sezione B ("Sito e producibilità"), c'è un bottone **"Genera foto tetto"** che produce due immagini:
+
+1. la foto aerea "pulita" del sito;
+2. la stessa foto con sovrimpressi i pannelli dell'impianto proposto (in verde, i primi N per producibilità, N = pannelli stimati dal dimensionamento) e il resto del layout massimo installabile come riferimento (in grigio).
+
+Entrambe derivano dal layer RGB della Google Solar API (`dataLayers.get`, endpoint `/api/roof-image`) e dalla lista pannelli di `buildingInsights` (`quote.roof.solarPanels`) già usata per il dimensionamento — nessuna nuova API da configurare, serve solo `GOOGLE_SOLAR_API_KEY` (la stessa già usata per `/api/solar` e `/api/quote`).
+
+**Nota costi:** a differenza di `buildingInsights` (livello di prezzo "Essentials"), `dataLayers` è nel livello "Enterprise", più caro — per questo il bottone è un'azione a parte e non viene chiamato automaticamente ad ogni preventivo. Verificare il prezzo aggiornato per SKU nella console Google Cloud del progetto prima di un uso in produzione su volumi alti, ed eventualmente impostare un quota/budget cap giornaliero sul progetto.
+
+Se la copertura satellitare Solar API per il sito non è disponibile o di qualità sufficiente, il bottone resta attivo ma la richiesta può fallire (errore mostrato in dashboard); il resto del preventivo (numeri, dimensionamento, economics) non ne risente, perché la generazione immagini è indipendente da `/api/quote`.
+
 ## Sviluppo locale
 
 ```bash
@@ -44,4 +57,4 @@ npm run dev
 - Nessun salvataggio dei preventivi generati (nessun database collegato).
 - Nessuna generazione PDF del preventivo.
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).
-- Il conteggio pannelli e l&apos;area occupata sono stime (modulo da 530 Wp, densità 0,20 kWp/m²), non un layout reale sul tetto.
+- Il conteggio pannelli e l&apos;area occupata restano stime aggregate (modulo da 530 Wp, densità 0,20 kWp/m²); la simulazione fotografica del layout (vedi sopra) usa le posizioni candidate calcolate dall&apos;algoritmo di Google, non un progetto elettrico/strutturale reale del tetto.

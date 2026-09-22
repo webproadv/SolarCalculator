@@ -60,6 +60,11 @@ export default function Page() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
 
+  // Step 4 — foto satellitare e simulazione pannelli (on demand, vedi /api/roof-image)
+  const [roofImages, setRoofImages] = useState(null);
+  const [roofImagesLoading, setRoofImagesLoading] = useState(false);
+  const [roofImagesError, setRoofImagesError] = useState("");
+
   async function cercaAzienda(e) {
     e.preventDefault();
     setCompanyError("");
@@ -133,6 +138,8 @@ export default function Page() {
   async function generaPreventivo() {
     setQuoteError("");
     setQuoteLoading(true);
+    setRoofImages(null);
+    setRoofImagesError("");
     try {
       const r = await fetch("/api/quote", {
         method: "POST",
@@ -155,6 +162,36 @@ export default function Page() {
       setQuoteError(err.message);
     } finally {
       setQuoteLoading(false);
+    }
+  }
+
+  // Foto satellitare + simulazione pannelli sul tetto (Google Solar API
+  // dataLayers): a differenza di generaPreventivo, non viene chiamata in
+  // automatico — l'utente la richiede col bottone in dashboard, perché usa
+  // un livello di prezzo più caro della sola buildingInsights.
+  async function generaFotoTetto() {
+    if (!quote) return;
+    setRoofImagesError("");
+    setRoofImagesLoading(true);
+    try {
+      const r = await fetch("/api/roof-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          lat: company.lat,
+          lng: company.lng,
+          segments: quote.roof.segments,
+          solarPanels: quote.roof.solarPanels,
+          panelsCount: quote.sizing.pannelliStimati,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nella generazione delle foto.");
+      setRoofImages(data);
+    } catch (err) {
+      setRoofImagesError(err.message);
+    } finally {
+      setRoofImagesLoading(false);
     }
   }
 
@@ -448,13 +485,21 @@ export default function Page() {
           )}
         </div>
       ) : (
-        <Dashboard company={company} quote={quote} onRestart={() => setStep(0)} />
+        <Dashboard
+          company={company}
+          quote={quote}
+          onRestart={() => setStep(0)}
+          roofImages={roofImages}
+          roofImagesLoading={roofImagesLoading}
+          roofImagesError={roofImagesError}
+          onGeneraFotoTetto={generaFotoTetto}
+        />
       )}
     </>
   );
 }
 
-function Dashboard({ company, quote, onRestart }) {
+function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, onGeneraFotoTetto }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
   const areaTot = seg.reduce((s, x) => s + x.areaMeters2, 0);
@@ -563,6 +608,40 @@ function Dashboard({ company, quote, onRestart }) {
             <div className="card-note">{quote.sizing.kwp} kWp installati — fonte PVGIS</div>
             <BarChart data={quote.production.monthlyKwh} />
           </div>
+        </div>
+
+        <div className="card" style={{ marginTop: 20 }}>
+          <h3>Foto satellitare e simulazione pannelli</h3>
+          <div className="card-note">
+            Foto aerea del sito e simulazione dell&apos;impianto proposto sul tetto, generate on demand dal layer RGB della Google Solar API (richiesta separata dal preventivo).
+          </div>
+
+          {!quote.roof.solarPanels?.length ? (
+            <div className="card-note" style={{ marginTop: 10 }}>
+              Non disponibile: {quote.demo
+                ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
+                : "la Solar API non ha restituito dati sui pannelli per questo sito."}
+            </div>
+          ) : !roofImages ? (
+            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={onGeneraFotoTetto} disabled={roofImagesLoading}>
+              {roofImagesLoading && <span className="spinner" />}
+              Genera foto tetto →
+            </button>
+          ) : (
+            <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 280px" }}>
+                <img src={roofImages.satelliteImageUrl} alt="Foto aerea del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+                <div className="card-note" style={{ marginTop: 6 }}>Foto aerea · rilievo {roofImages.imageryDate || "n/d"}</div>
+              </div>
+              <div style={{ flex: "1 1 280px" }}>
+                <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+                <div className="card-note" style={{ marginTop: 6 }}>
+                  Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
+                </div>
+              </div>
+            </div>
+          )}
+          {roofImagesError && <div className="error-box" style={{ marginTop: 10 }}>{roofImagesError}</div>}
         </div>
       </section>
 

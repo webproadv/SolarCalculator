@@ -107,6 +107,9 @@ export async function POST(req) {
         maxArrayAreaMeters2: roof.maxArrayAreaMeters2,
         carbonOffsetFactorKgPerMwh: roof.carbonOffsetFactorKgPerMwh,
         segments: roof.segments.map((seg, i) => ({ ...seg, producibilitaSpecifica: Math.round(specificYields[i]) })),
+        // Passati al frontend solo per l'eventuale generazione su richiesta
+        // della foto con simulazione pannelli (vedi /api/roof-image).
+        solarPanels: roof.solarPanels || [],
       },
       sizing: {
         kwp,
