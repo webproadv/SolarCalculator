@@ -1,10 +1,21 @@
 "use client";
 
 import { useState, useRef } from "react";
+import {
+  DEFAULTS,
+  diurnoNotturno,
+  estimateSelfConsumption,
+  energyBalance,
+  economics,
+  paybackYears,
+  co2Evitata,
+  monthlyProductionFromShares,
+} from "../lib/calc";
 
-const STEPS = ["Azienda", "Bolletta", "Consumi", "Risultati"];
+const STEPS = ["Azienda", "Consumi", "Risultati"];
 
 const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+const MESI_BREVI = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
 
 // Somma i kWh per fascia da una tabella di consumi mensili (12 righe {f1,f2,f3}).
 function monthlyTotals(monthly) {
@@ -28,6 +39,31 @@ function pctFromTotals({ f1, f2, f3 }) {
   return { f1: pf1, f2: pf2, f3: 100 - pf1 - pf2 };
 }
 
+// Consumo diurno/notturno mese per mese, per il grafico combinato in
+// dashboard. In modalità "manuale" usa i kWh realmente inseriti in tabella;
+// in modalità "foto" (nessun dettaglio mensile disponibile dalla bolletta)
+// distribuisce il consumo annuo in parti uguali sui 12 mesi e applica ad
+// ognuno la ripartizione F1/F2/F3 media annua — una semplificazione
+// dichiarata anche in dashboard, non un profilo di carico reale.
+function computeMonthlyConsumo({ usaManuale, monthly, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, giorniLavorativi }) {
+  return MESI.map((_, i) => {
+    let f1, f2, f3;
+    if (usaManuale) {
+      f1 = Number(monthly[i].f1) || 0;
+      f2 = Number(monthly[i].f2) || 0;
+      f3 = Number(monthly[i].f3) || 0;
+    } else {
+      const totaleMese = consumoAnnuoKwh / 12;
+      f1 = totaleMese * (f1Pct / 100);
+      f2 = totaleMese * (f2Pct / 100);
+      f3 = totaleMese * (f3Pct / 100);
+    }
+    const totale = f1 + f2 + f3;
+    const { diurno, notturno } = diurnoNotturno({ f1Kwh: f1, f2Kwh: f2, f3Kwh: f3, totaleKwh: totale, giorniLavorativi });
+    return { diurno, notturno, totale: Math.round(totale) };
+  });
+}
+
 export default function Page() {
   const [step, setStep] = useState(0);
 
@@ -37,7 +73,7 @@ export default function Page() {
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState("");
 
-  // Step 2 — bolletta / fasce
+  // Step 2 — bolletta / fasce / consumo totale / spesa / produzione FV / giorni lavorativi
   const [f1Pct, setF1Pct] = useState(55);
   const [f2Pct, setF2Pct] = useState(25);
   const [f3Pct, setF3Pct] = useState(20);
@@ -47,20 +83,27 @@ export default function Page() {
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
-  // Step 2 — inserimento manuale dei consumi mensili (alternativa alla foto)
   const [bollettaMode, setBollettaMode] = useState("foto"); // "foto" | "manuale"
   const [monthly, setMonthly] = useState(MESI.map(() => ({ f1: "", f2: "", f3: "" })));
 
-  // Step 3 — consumi
-  const [spesaAnnua, setSpesaAnnua] = useState("");
+  // In modalità "manuale" il consumo annuo è calcolato automaticamente dalla
+  // tabella mensile; in modalità "foto" viene letto dalla bolletta (OCR) se
+  // disponibile, altrimenti inserito qui a mano. La spesa annua, la
+  // produzione annua FV e i giorni lavorativi si inseriscono sempre in
+  // questa stessa schermata, in entrambe le modalità.
   const [consumoAnnuoKwh, setConsumoAnnuoKwh] = useState("");
+  const [spesaAnnua, setSpesaAnnua] = useState("");
+  const [produzioneAnnuaFvKwh, setProduzioneAnnuaFvKwh] = useState("");
+  const [giorniLavorativi, setGiorniLavorativi] = useState(5);
 
-  // Step 4 — risultati
+  // Step 3 — risultati
   const [quote, setQuote] = useState(null);
+  const [monthlyConsumo, setMonthlyConsumo] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
 
-  // Step 4 — foto satellitare e simulazione pannelli (on demand, vedi /api/roof-image)
+  // Foto satellitare e simulazione pannelli: generate automaticamente subito
+  // dopo il preventivo (vedi generaPreventivo), mostrate in dashboard.
   const [roofImages, setRoofImages] = useState(null);
   const [roofImagesLoading, setRoofImagesLoading] = useState(false);
   const [roofImagesError, setRoofImagesError] = useState("");
@@ -83,6 +126,10 @@ export default function Page() {
     } finally {
       setCompanyLoading(false);
     }
+  }
+
+  function updateCompanyField(key, value) {
+    setCompany((prev) => ({ ...prev, [key]: value }));
   }
 
   function normalizeF(next, changed) {
@@ -119,58 +166,46 @@ export default function Page() {
       const r = await fetch("/api/ocr-bolletta", { method: "POST", body: fd });
       const data = await r.json();
       if (data.available === false) {
-        setOcrNote("Lettura automatica non configurata su questa istanza (manca ANTHROPIC_API_KEY): imposta le percentuali manualmente qui sotto.");
+        setOcrNote("Lettura automatica non configurata su questa istanza (manca ANTHROPIC_API_KEY): imposta i valori manualmente qui sotto.");
       } else if (data.error) {
-        setOcrNote(`Lettura automatica non riuscita (${data.error}). Imposta le percentuali manualmente.`);
-      } else if (typeof data.f1_pct === "number") {
-        setF1Pct(Math.round(data.f1_pct));
-        setF2Pct(Math.round(data.f2_pct));
-        setF3Pct(Math.round(100 - Math.round(data.f1_pct) - Math.round(data.f2_pct)));
-        setOcrNote(`Valori letti automaticamente dal grafico (confidenza: ${data.confidence || "n/d"}). Controlla e correggi se necessario.`);
+        setOcrNote(`Lettura automatica non riuscita (${data.error}). Imposta i valori manualmente.`);
+      } else {
+        const letti = [];
+        if (typeof data.f1_pct === "number" && typeof data.f2_pct === "number") {
+          setF1Pct(Math.round(data.f1_pct));
+          setF2Pct(Math.round(data.f2_pct));
+          setF3Pct(Math.round(100 - Math.round(data.f1_pct) - Math.round(data.f2_pct)));
+          letti.push("ripartizione F1/F2/F3");
+        }
+        // Precompila consumo/spesa solo se l'utente non ha già inserito un
+        // valore, per non sovrascrivere una correzione manuale.
+        if (typeof data.consumo_annuo_kwh === "number") {
+          setConsumoAnnuoKwh((prev) => (prev ? prev : String(Math.round(data.consumo_annuo_kwh))));
+          letti.push("consumo annuo");
+        }
+        if (typeof data.spesa_annua_euro === "number") {
+          setSpesaAnnua((prev) => (prev ? prev : String(Math.round(data.spesa_annua_euro))));
+          letti.push("spesa annua");
+        }
+        setOcrNote(
+          letti.length
+            ? `Valori letti automaticamente dalla bolletta (${letti.join(", ")} — confidenza: ${data.confidence || "n/d"}). Controlla e correggi se necessario.`
+            : `Non è stato possibile leggere valori affidabili dalla foto (confidenza: ${data.confidence || "n/d"}). Inserisci i dati manualmente.`
+        );
       }
     } catch (err) {
-      setOcrNote(`Errore durante la lettura automatica: ${err.message}. Imposta le percentuali manualmente.`);
+      setOcrNote(`Errore durante la lettura automatica: ${err.message}. Imposta i valori manualmente.`);
     } finally {
       setOcrLoading(false);
     }
   }
 
-  async function generaPreventivo() {
-    setQuoteError("");
-    setQuoteLoading(true);
-    setRoofImages(null);
-    setRoofImagesError("");
-    try {
-      const r = await fetch("/api/quote", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          lat: company.lat,
-          lng: company.lng,
-          spesaAnnua: Number(spesaAnnua),
-          consumoAnnuoKwh: Number(consumoAnnuoKwh),
-          f1Pct,
-          f2Pct,
-          f3Pct,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Errore nel calcolo del preventivo.");
-      setQuote(data);
-      setStep(3);
-    } catch (err) {
-      setQuoteError(err.message);
-    } finally {
-      setQuoteLoading(false);
-    }
-  }
-
   // Foto satellitare + simulazione pannelli sul tetto (Google Solar API
-  // dataLayers): a differenza di generaPreventivo, non viene chiamata in
-  // automatico — l'utente la richiede col bottone in dashboard, perché usa
-  // un livello di prezzo più caro della sola buildingInsights.
-  async function generaFotoTetto() {
-    if (!quote) return;
+  // dataLayers): generata automaticamente non appena è pronto un preventivo
+  // reale (non demo) con posizioni pannelli disponibili — nessuna azione
+  // richiesta all'utente.
+  async function fetchRoofImagesAuto(quoteData, companyData) {
+    if (!quoteData?.roof?.solarPanels?.length) return;
     setRoofImagesError("");
     setRoofImagesLoading(true);
     try {
@@ -178,11 +213,11 @@ export default function Page() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          lat: company.lat,
-          lng: company.lng,
-          segments: quote.roof.segments,
-          solarPanels: quote.roof.solarPanels,
-          panelsCount: quote.sizing.pannelliStimati,
+          lat: companyData.lat,
+          lng: companyData.lng,
+          segments: quoteData.roof.segments,
+          solarPanels: quoteData.roof.solarPanels,
+          panelsCount: Math.round(quoteData.sizing.kwpSuggerito * 1000 / 530),
         }),
       });
       const data = await r.json();
@@ -192,6 +227,65 @@ export default function Page() {
       setRoofImagesError(err.message);
     } finally {
       setRoofImagesLoading(false);
+    }
+  }
+
+  async function generaPreventivo() {
+    setQuoteError("");
+    setQuoteLoading(true);
+    setRoofImages(null);
+    setRoofImagesError("");
+
+    const usaManuale = bollettaMode === "manuale";
+    const totali = monthlyTotals(monthly);
+    const pctCalcolate = pctFromTotals(totali);
+
+    // In modalità manuale il consumo e le percentuali derivano sempre dalla
+    // tabella mensile (calcolati, non richiesti di nuovo); in modalità foto
+    // si usano i valori (letti o corretti a mano) di questa schermata.
+    const consumoEffettivo = usaManuale ? totali.total : Number(consumoAnnuoKwh);
+    const f1Effettivo = usaManuale ? pctCalcolate.f1 : f1Pct;
+    const f2Effettivo = usaManuale ? pctCalcolate.f2 : f2Pct;
+    const f3Effettivo = usaManuale ? pctCalcolate.f3 : f3Pct;
+    const giorniEffettivi = Number(giorniLavorativi) || 5;
+
+    try {
+      const r = await fetch("/api/quote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          lat: company.lat,
+          lng: company.lng,
+          spesaAnnua: Number(spesaAnnua),
+          consumoAnnuoKwh: consumoEffettivo,
+          f1Pct: f1Effettivo,
+          f2Pct: f2Effettivo,
+          f3Pct: f3Effettivo,
+          produzioneAnnuaFvKwh: Number(produzioneAnnuaFvKwh),
+          giorniLavorativi: giorniEffettivi,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nel calcolo del preventivo.");
+      setQuote(data);
+      setMonthlyConsumo(
+        computeMonthlyConsumo({
+          usaManuale,
+          monthly,
+          consumoAnnuoKwh: consumoEffettivo,
+          f1Pct: f1Effettivo,
+          f2Pct: f2Effettivo,
+          f3Pct: f3Effettivo,
+          giorniLavorativi: giorniEffettivi,
+        })
+      );
+      setStep(2);
+      // Non blocca il passaggio alla dashboard: le foto arrivano appena pronte.
+      fetchRoofImagesAuto(data, company);
+    } catch (err) {
+      setQuoteError(err.message);
+    } finally {
+      setQuoteLoading(false);
     }
   }
 
@@ -205,6 +299,10 @@ export default function Page() {
 
   const monthlyTotalsCalc = monthlyTotals(monthly);
   const monthlyPctCalc = pctFromTotals(monthlyTotalsCalc);
+
+  const consumoValido = bollettaMode === "manuale" ? monthlyTotalsCalc.total > 0 : Number(consumoAnnuoKwh) > 0;
+  const spesaValida = Number(spesaAnnua) > 0;
+  const produzioneValida = Number(produzioneAnnuaFvKwh) > 0;
 
   return (
     <>
@@ -221,10 +319,10 @@ export default function Page() {
         </div>
       </div>
 
-      {step < 3 ? (
+      {step < 2 ? (
         <div className="wizard">
           <div className="steps">
-            {STEPS.slice(0, 3).map((s, i) => (
+            {STEPS.slice(0, 2).map((s, i) => (
               <div key={s} className={`step-dot ${i === step ? "active" : i < step ? "done" : ""}`} title={s} />
             ))}
           </div>
@@ -232,7 +330,7 @@ export default function Page() {
           {step === 0 && (
             <div className="card">
               <h3>Dati azienda</h3>
-              <p className="card-note">Inserisci la Partita IVA: recuperiamo automaticamente ragione sociale e indirizzo.</p>
+              <p className="card-note">Inserisci la Partita IVA: recuperiamo automaticamente ragione sociale e indirizzo (puoi correggerli).</p>
               <form onSubmit={cercaAzienda}>
                 <div className="field">
                   <label htmlFor="piva">Partita IVA</label>
@@ -262,27 +360,37 @@ export default function Page() {
                   )}
                   <div className="field">
                     <label>Ragione sociale</label>
-                    <input type="text" value={company.ragioneSociale} onChange={(e) => setCompany({ ...company, ragioneSociale: e.target.value })} />
+                    <input type="text" value={company.ragioneSociale} onChange={(e) => updateCompanyField("ragioneSociale", e.target.value)} />
                   </div>
                   <div className="field">
                     <label>Indirizzo</label>
-                    <input
-                      type="text"
-                      value={`${company.indirizzo}, ${company.cap} ${company.comune} (${company.provincia})`}
-                      readOnly
-                    />
+                    <input type="text" value={company.indirizzo} onChange={(e) => updateCompanyField("indirizzo", e.target.value)} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr", gap: 12 }}>
+                    <div className="field">
+                      <label>Comune</label>
+                      <input type="text" value={company.comune} onChange={(e) => updateCompanyField("comune", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>CAP</label>
+                      <input type="text" value={company.cap} onChange={(e) => updateCompanyField("cap", e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Prov.</label>
+                      <input type="text" value={company.provincia} maxLength={2} onChange={(e) => updateCompanyField("provincia", e.target.value.toUpperCase())} />
+                    </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div className="field">
                       <label>Latitudine</label>
-                      <input type="number" step="0.000001" value={company.lat} onChange={(e) => setCompany({ ...company, lat: Number(e.target.value) })} />
+                      <input type="number" step="0.000001" value={company.lat} onChange={(e) => updateCompanyField("lat", Number(e.target.value))} />
                     </div>
                     <div className="field">
                       <label>Longitudine</label>
-                      <input type="number" step="0.000001" value={company.lng} onChange={(e) => setCompany({ ...company, lng: Number(e.target.value) })} />
+                      <input type="number" step="0.000001" value={company.lng} onChange={(e) => updateCompanyField("lng", Number(e.target.value))} />
                     </div>
                   </div>
-                  <p className="hint">La sede legale non sempre coincide con il capannone su cui installare i pannelli: correggi le coordinate se necessario.</p>
+                  <p className="hint">La sede legale non sempre coincide con il capannone su cui installare i pannelli: correggi indirizzo e coordinate se necessario.</p>
                   <div className="btn-row">
                     <span />
                     <button className="btn btn-primary" onClick={() => setStep(1)}>
@@ -296,8 +404,10 @@ export default function Page() {
 
           {step === 1 && (
             <div className="card">
-              <h3>Consumi in fascia (F1/F2/F3)</h3>
-              <p className="card-note">Carica una foto della bolletta per la lettura automatica, oppure inserisci i consumi mensili manualmente.</p>
+              <h3>Consumi e spesa energetica</h3>
+              <p className="card-note">
+                Carica una foto della bolletta oppure inserisci i consumi mensili: consumo annuo totale e ripartizione F1/F2/F3 vengono calcolati automaticamente. Indica anche la spesa energetica annua, la produzione annua del tuo riferimento FV e i giorni lavorativi settimanali dell&apos;azienda.
+              </p>
 
               <div className="mode-tabs">
                 <button
@@ -358,7 +468,7 @@ export default function Page() {
                     onChange={(e) => onBollettaUpload(e.target.files?.[0])}
                   />
 
-                  {ocrLoading && <p className="hint">Lettura del grafico in corso…</p>}
+                  {ocrLoading && <p className="hint">Lettura della bolletta in corso…</p>}
                   {ocrNote && <div className="info-box" style={{ marginTop: 12 }}>{ocrNote}</div>}
 
                   <div style={{ marginTop: 22 }}>
@@ -384,11 +494,23 @@ export default function Page() {
                       <span className="val mono">{f3Pct}%</span>
                     </div>
                   </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22 }}>
+                    <div className="field">
+                      <label>Consumo annuo (kWh)</label>
+                      <input type="number" min="0" placeholder="es. 180000" value={consumoAnnuoKwh} onChange={(e) => setConsumoAnnuoKwh(e.target.value)} />
+                      <p className="hint">Letto dalla foto se leggibile, altrimenti inseriscilo qui.</p>
+                    </div>
+                    <div className="field">
+                      <label>Spesa energetica annua (€)</label>
+                      <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
                   <p className="hint" style={{ marginBottom: 14 }}>
-                    Inserisci i kWh consumati per fascia in ciascun mese (dati disponibili in bolletta o nel portale del fornitore).
+                    Inserisci i kWh consumati per fascia in ciascun mese (dati disponibili in bolletta o nel portale del fornitore): il totale annuo si calcola da solo.
                   </p>
                   <div className="mensile-table-wrap">
                     <table className="mensile-table">
@@ -422,59 +544,53 @@ export default function Page() {
                     <StatMini v={`${monthlyTotalsCalc.f1.toLocaleString("it-IT")} kWh`} l="Totale F1" />
                     <StatMini v={`${monthlyTotalsCalc.f2.toLocaleString("it-IT")} kWh`} l="Totale F2" />
                     <StatMini v={`${monthlyTotalsCalc.f3.toLocaleString("it-IT")} kWh`} l="Totale F3" />
-                    <StatMini v={`${monthlyTotalsCalc.total.toLocaleString("it-IT")} kWh`} l="Totale annuo" />
+                    <StatMini v={`${monthlyTotalsCalc.total.toLocaleString("it-IT")} kWh`} l="Totale annuo (automatico)" />
                   </div>
                   {monthlyTotalsCalc.total > 0 && (
                     <p className="hint" style={{ marginTop: 10 }}>
                       Ripartizione calcolata: F1 {monthlyPctCalc.f1}% · F2 {monthlyPctCalc.f2}% · F3 {monthlyPctCalc.f3}%
                     </p>
                   )}
+
+                  <div className="field" style={{ marginTop: 20, maxWidth: 320 }}>
+                    <label>Spesa energetica annua (€)</label>
+                    <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
+                    <p className="hint">
+                      Prezzo medio stimato: {spesaAnnua && monthlyTotalsCalc.total ? `€ ${(Number(spesaAnnua) / monthlyTotalsCalc.total).toFixed(3)}/kWh` : "—"}
+                    </p>
+                  </div>
                 </>
               )}
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+                <div className="field">
+                  <label>Produzione annuale FV (kWh/kWp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="es. 1350"
+                    value={produzioneAnnuaFvKwh}
+                    onChange={(e) => setProduzioneAnnuaFvKwh(e.target.value)}
+                  />
+                  <p className="hint">Producibilità specifica annua del sito (es. da PVGIS o da una tua stima): kWh prodotti per ogni kWp installato.</p>
+                </div>
+                <div className="field">
+                  <label>Giorni lavorativi</label>
+                  <select value={giorniLavorativi} onChange={(e) => setGiorniLavorativi(Number(e.target.value))}>
+                    <option value={5}>5 giorni (lun–ven)</option>
+                    <option value={6}>6 giorni (lun–sab)</option>
+                    <option value={7}>7 giorni (tutti i giorni)</option>
+                  </select>
+                  <p className="hint">Usato per calcolare il fabbisogno diurno e notturno dell&apos;azienda.</p>
+                </div>
+              </div>
+
+              {quoteError && <div className="error-box" style={{ marginTop: 16 }}>{quoteError}</div>}
               <div className="btn-row">
                 <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
                 <button
                   className="btn btn-primary"
-                  disabled={bollettaMode === "manuale" && monthlyTotalsCalc.total === 0}
-                  onClick={() => {
-                    if (bollettaMode === "manuale") {
-                      setF1Pct(monthlyPctCalc.f1);
-                      setF2Pct(monthlyPctCalc.f2);
-                      setF3Pct(monthlyPctCalc.f3);
-                      setConsumoAnnuoKwh(String(Math.round(monthlyTotalsCalc.total)));
-                    }
-                    setStep(2);
-                  }}
-                >
-                  Continua →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="card">
-              <h3>Consumi energetici</h3>
-              <p className="card-note">Dati disponibili in bolletta: spesa annua e kWh totali consumati nell&apos;ultimo anno.</p>
-              <div className="field">
-                <label>Spesa energetica annua (€)</label>
-                <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Consumo annuo (kWh)</label>
-                <input type="number" min="0" placeholder="es. 180000" value={consumoAnnuoKwh} onChange={(e) => setConsumoAnnuoKwh(e.target.value)} />
-                <p className="hint">
-                  {bollettaMode === "manuale" && "Calcolato dalla tabella mensile inserita — puoi correggerlo. "}
-                  Prezzo medio stimato: {spesaAnnua && consumoAnnuoKwh ? `€ ${(Number(spesaAnnua) / Number(consumoAnnuoKwh)).toFixed(3)}/kWh` : "—"}
-                </p>
-              </div>
-              {quoteError && <div className="error-box">{quoteError}</div>}
-              <div className="btn-row">
-                <button className="btn btn-ghost" onClick={() => setStep(1)}>← Indietro</button>
-                <button
-                  className="btn btn-primary"
-                  disabled={quoteLoading || !spesaAnnua || !consumoAnnuoKwh}
+                  disabled={quoteLoading || !consumoValido || !spesaValida || !produzioneValida}
                   onClick={generaPreventivo}
                 >
                   {quoteLoading && <span className="spinner" />}
@@ -492,24 +608,73 @@ export default function Page() {
           roofImages={roofImages}
           roofImagesLoading={roofImagesLoading}
           roofImagesError={roofImagesError}
-          onGeneraFotoTetto={generaFotoTetto}
+          monthlyConsumo={monthlyConsumo}
+          bollettaMode={bollettaMode}
         />
       )}
     </>
   );
 }
 
-function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, onGeneraFotoTetto }) {
+function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, monthlyConsumo, bollettaMode }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
   const areaTot = seg.reduce((s, x) => s + x.areaMeters2, 0);
+  const hasPanelsData = quote.roof.solarPanels?.length > 0;
+
+  // Impianto, accumulo e costo proposti: pre-compilati con i valori
+  // suggeriti dal calcolo, ma sempre modificabili — dal loro valore
+  // dipendono produzione, autoconsumo, benefici e payback qui sotto.
+  const [impiantoProposto, setImpiantoProposto] = useState(String(quote.sizing.kwpSuggerito || ""));
+  const [accumuloProposto, setAccumuloProposto] = useState(String(quote.sizing.accumuloSuggeritoKwh || 0));
+  const [costoImpiantoProposto, setCostoImpiantoProposto] = useState(String(quote.sizing.investimentoSuggerito || ""));
+
+  const kwp = Number(impiantoProposto) || 0;
+  const batteriaKwh = Number(accumuloProposto) || 0;
+  const costoImpianto = Number(costoImpiantoProposto) || 0;
+  const hasBattery = batteriaKwh > 0;
+
+  const produzioneAnnuaTotaleKwh = kwp * (quote.input.produzioneAnnuaFvKwh || 0);
+  const monthlyProduction = monthlyProductionFromShares(produzioneAnnuaTotaleKwh);
+
+  const autoconsumoFrac = quote.input.consumoAnnuoKwh
+    ? estimateSelfConsumption({
+        hasBattery,
+        kwp,
+        consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
+        producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh,
+      })
+    : 0;
+  const autoconsumoPct = Math.round(autoconsumoFrac * 1000) / 10; // percentuale, 1 decimale
+  const balance = energyBalance({ producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh, autoconsumoPct: autoconsumoFrac });
+  const econ = economics({
+    spesaAnnua: quote.input.spesaAnnua,
+    consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
+    energiaAutoconsumata: balance.autoconsumata,
+    energiaImmessa: balance.immessa,
+    tariffaGSE: quote.input.tariffaGSE,
+    tariffaCER: quote.input.tariffaCER,
+  });
+  const payback = paybackYears({ investimento: costoImpianto, beneficioAnnuo: econ.beneficioTotale });
+  const co2 = co2Evitata({
+    producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh,
+    carbonOffsetFactorKgPerMwh: quote.roof.carbonOffsetFactorKgPerMwh ?? 350,
+  });
+  const coperturaFabbisognoPct = quote.input.consumoAnnuoKwh
+    ? Math.round((produzioneAnnuaTotaleKwh / quote.input.consumoAnnuoKwh) * 1000) / 10
+    : 0;
+  const pannelliStimati = Math.round((kwp * 1000) / 530);
+  const areaOccupataStimataM2 = Math.round(kwp / DEFAULTS.kwpPerM2);
+  const limitatoDalTetto = quote.sizing.maxKwpTetto > 0 && kwp > quote.sizing.maxKwpTetto;
+
+  const monthlyDiurno = (monthlyConsumo || []).map((m) => m.diurno);
+  const monthlyNotturno = (monthlyConsumo || []).map((m) => m.notturno);
 
   return (
     <div className="wrap">
       {(quote.demo || company?.demo) && (
         <div className="demo-banner" style={{ margin: "0 -24px 24px" }}>
           DATI DI ESEMPIO — alcune sorgenti non sono configurate su questa istanza (vedi README)
-          <span> · PVGIS è comunque reale quando raggiungibile</span>
         </div>
       )}
 
@@ -529,22 +694,226 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
             </dl>
           </div>
           <div className="company-map">
-            <RoofSvg segments={seg} colors={segColors} />
-            <span className="map-tag">📍 {quote.roof.imageryQuality || "N/D"} · {quote.roof.imageryDate || "n/d"}</span>
+            {roofImages ? (
+              <img
+                src={roofImages.satelliteImageUrl}
+                alt="Foto aerea satellitare del sito"
+                style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }}
+              />
+            ) : roofImagesLoading ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, color: "var(--ink-soft)", fontSize: 12.5 }}>
+                <span className="spinner" />
+                Generazione foto satellitare…
+              </div>
+            ) : (
+              <RoofSvg segments={seg} colors={segColors} />
+            )}
+            <span className="map-tag">📍 {quote.roof.imageryQuality || "N/D"} · {roofImages?.imageryDate || quote.roof.imageryDate || "n/d"}</span>
           </div>
         </div>
 
         <div className="kpi-strip">
-          <Kpi label="Potenza impianto" value={quote.sizing.kwp} unit="kWp" delta={`${quote.sizing.pannelliStimati} pannelli stimati`} accent />
-          <Kpi label="Produzione annua" value={(quote.production.annuaKwh / 1000).toFixed(1)} unit="MWh" delta={`${quote.production.coperturaFabbisognoPct}% del fabbisogno`} />
-          <Kpi label="Autoconsumo" value={quote.balance.autoconsumoPct} unit="%" delta={quote.sizing.hasBattery ? `con accumulo ${quote.sizing.batteriaKwh} kWh` : "senza accumulo"} good />
-          <Kpi label="Beneficio annuo" value={`€ ${quote.economics.beneficioTotale.toLocaleString("it-IT")}`} delta="risparmio + GSE + CER" good />
-          <Kpi label="Payback stimato" value={quote.investment.paybackYears ?? "—"} unit="anni" delta={`su investimento ~€${Math.round(quote.investment.stimaEuro / 1000)}k`} />
+          <Kpi label="Potenza impianto" value={kwp} unit="kWp" delta={`${pannelliStimati} pannelli stimati`} accent />
+          <Kpi label="Produzione annua" value={(produzioneAnnuaTotaleKwh / 1000).toFixed(1)} unit="MWh" delta={`${coperturaFabbisognoPct}% del fabbisogno`} />
+          <Kpi label="Autoconsumo" value={autoconsumoPct} unit="%" delta={hasBattery ? `con accumulo ${batteriaKwh} kWh` : "senza accumulo"} good />
+          <Kpi label="Beneficio annuo" value={`€ ${econ.beneficioTotale.toLocaleString("it-IT")}`} delta="risparmio + GSE + CER" good />
+          <Kpi label="Payback stimato" value={payback ?? "—"} unit="anni" delta={`su investimento € ${costoImpianto.toLocaleString("it-IT")}`} />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h3>Profilo di consumo</h3>
+        <div className="card-note">Consumi annui per fascia oraria e ripartizione diurno/notturno, calcolati dai dati inseriti nello step Consumi</div>
+        <div className="grid-3" style={{ marginTop: 4 }}>
+          <StatMini v={`${quote.input.f1Kwh.toLocaleString("it-IT")} kWh`} l={`F1 — punta (${quote.input.f1Pct}%)`} />
+          <StatMini v={`${quote.input.f2Kwh.toLocaleString("it-IT")} kWh`} l={`F2 — intermedia (${quote.input.f2Pct}%)`} />
+          <StatMini v={`${quote.input.f3Kwh.toLocaleString("it-IT")} kWh`} l={`F3 — fuori punta (${quote.input.f3Pct}%)`} />
+          <StatMini v={`${quote.input.consumoDiurnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo diurno" />
+          <StatMini v={`${quote.input.consumoNotturnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo notturno" />
+          <StatMini v={`${quote.input.giorniLavorativi} giorni/sett.`} l="Giorni lavorativi dichiarati" />
         </div>
       </div>
 
       <section className="block" id="a">
-        <div className="block-head"><span className="block-tag">A</span><h2>Dati di partenza</h2></div>
+        <div className="block-head"><span className="block-tag">A</span><h2>Producibilità fotovoltaica</h2></div>
+        <div className="grid-2">
+          <div className="card">
+            <h3>Produzione mensile stimata impianto</h3>
+            <div className="card-note">{kwp} kWp proposti — ripartizione mensile da profilo tipico</div>
+            <BarChart data={monthlyProduction} />
+          </div>
+          <div className="card">
+            <h3>Come viene calcolata</h3>
+            <div className="card-note">Produzione annua = produzione specifica del sito × impianto proposto</div>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+              <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l="Produzione specifica annua (inserita)" />
+              <StatMini v={`${kwp} kWp`} l="Impianto proposto" />
+              <StatMini v={`${Math.round(produzioneAnnuaTotaleKwh).toLocaleString("it-IT")} kWh`} l="Produzione annua totale stimata" />
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: 20 }}>
+          <h3>Segmenti di tetto individuati</h3>
+          <div className="card-note">{quote.roof.imageryQuality || "N/D"} quality · rilievo {quote.roof.imageryDate || "n/d"}</div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Segmento</th><th className="num">Area</th><th className="num">Pitch reale</th><th className="num">Azimuth</th></tr></thead>
+              <tbody>
+                {seg.map((s, i) => (
+                  <tr key={i}>
+                    <td><span className="seg-swatch" style={{ background: segColors[i % 3] }} />{s.nome}</td>
+                    <td className="num">{s.areaMeters2.toFixed(0)} m²</td>
+                    <td className="num">{s.pitchDegrees.toFixed(1)}°</td>
+                    <td className="num">{s.azimuthDegrees.toFixed(0)}°</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint" style={{ marginTop: 10 }}>
+            Geometria del tetto da Google Solar API, usata per l&apos;area disponibile qui sotto e per la foto satellitare in alto; la produzione dell&apos;impianto (a sinistra) si basa sulla produzione specifica che hai inserito, non su questi dati di pendenza/orientamento.
+          </p>
+          <div style={{ marginTop: 14, display: "flex", gap: 20 }}>
+            <StatMini v={`${quote.roof.maxArrayPanelsCount ?? "—"}`} l="Pannelli max installabili (tetto)" />
+            <StatMini v={`${quote.sizing.maxKwpTetto ? quote.sizing.maxKwpTetto.toLocaleString("it-IT") : "—"} kWp`} l="Potenza max installabile (tetto)" />
+          </div>
+          {limitatoDalTetto && (
+            <span className="pill warn" style={{ marginTop: 10 }}>l&apos;impianto proposto supera la capacità stimata del tetto</span>
+          )}
+        </div>
+
+        <div className="card" style={{ marginTop: 20 }}>
+          <h3>Foto satellitare e simulazione pannelli</h3>
+          <div className="card-note">
+            Foto aerea del sito e simulazione dell&apos;impianto proposto sul tetto, generate automaticamente dal layer RGB della Google Solar API.
+          </div>
+
+          {!hasPanelsData ? (
+            <div className="card-note" style={{ marginTop: 10 }}>
+              Non disponibile: {quote.demo
+                ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
+                : "la Solar API non ha restituito dati sui pannelli per questo sito."}
+            </div>
+          ) : roofImagesLoading ? (
+            <p className="hint" style={{ marginTop: 10 }}><span className="spinner" style={{ marginRight: 8 }} />Generazione foto in corso…</p>
+          ) : roofImages ? (
+            <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 280px" }}>
+                <img src={roofImages.satelliteImageUrl} alt="Foto aerea del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+                <div className="card-note" style={{ marginTop: 6 }}>Foto aerea · rilievo {roofImages.imageryDate || "n/d"}</div>
+              </div>
+              <div style={{ flex: "1 1 280px" }}>
+                <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+                <div className="card-note" style={{ marginTop: 6 }}>
+                  Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {roofImagesError && <div className="error-box" style={{ marginTop: 10 }}>{roofImagesError}</div>}
+        </div>
+      </section>
+
+      <section className="block" id="b">
+        <div className="block-head"><span className="block-tag">B</span><h2>Dimensionamento impianto</h2></div>
+        <div className="grid-3">
+          <div className="card">
+            <h3>Impianto proposto</h3>
+            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+              <label>Impianto proposto (kWp)</label>
+              <input type="number" min="0" step="0.1" value={impiantoProposto} onChange={(e) => setImpiantoProposto(e.target.value)} />
+              <p className="hint">Suggerito: {quote.sizing.kwpSuggerito} kWp (consumo totale ÷ produzione annua FV)</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <StatMini v={`≈ ${pannelliStimati}`} l="Pannelli (moduli da 530 Wp)" />
+              <StatMini v={`${areaOccupataStimataM2} m²`} l={`Area occupata su ${areaTot.toFixed(0)} m² rilevati`} />
+            </div>
+          </div>
+          <div className="card">
+            <h3>Accumulo proposto</h3>
+            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+              <label>Accumulo proposto (kWh)</label>
+              <input type="number" min="0" step="1" value={accumuloProposto} onChange={(e) => setAccumuloProposto(e.target.value)} />
+              <p className="hint">Suggerito: {quote.sizing.accumuloSuggeritoKwh} kWh (consumo notturno ÷ 365)</p>
+            </div>
+            {!hasBattery && (
+              <p style={{ fontSize: 13.5, color: "var(--ink-soft)" }}>Nessun accumulo previsto con il valore attuale.</p>
+            )}
+          </div>
+          <div className="card">
+            <h3>Costo impianto proposto</h3>
+            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+              <label>Costo impianto proposto (€)</label>
+              <input type="number" min="0" step="100" value={costoImpiantoProposto} onChange={(e) => setCostoImpiantoProposto(e.target.value)} />
+              <p className="hint">Stima di riferimento: € {quote.sizing.investimentoSuggerito.toLocaleString("it-IT")} — modificalo con il prezzo reale del preventivo.</p>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <StatMini v={`${coperturaFabbisognoPct}%`} l="Copertura del fabbisogno" />
+              <div className="econ-track" style={{ marginTop: 10 }}>
+                <div className="econ-fill" style={{ width: `${Math.min(100, coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="block" id="c">
+        <div className="block-head"><span className="block-tag">C</span><h2>Vantaggi e bilancio economico</h2></div>
+        <div className="grid-2">
+          <div className="card">
+            <h3>Autoconsumo vs. immesso in rete</h3>
+            <div className="card-note">{(produzioneAnnuaTotaleKwh / 1000).toFixed(1)} MWh prodotti/anno</div>
+            <div className="donut-row">
+              <Donut
+                values={[autoconsumoPct, 100 - autoconsumoPct]}
+                colors={["var(--c-good)", "var(--c-grid)"]}
+                centerLabel={`${autoconsumoPct}%`}
+                centerSub="autoconsumo"
+              />
+              <div className="legend">
+                <LegendItem color="var(--c-good)" label="Autoconsumato" value={`${balance.autoconsumata.toLocaleString("it-IT")} kWh`} />
+                <LegendItem color="var(--c-grid)" label="Immesso in rete" value={`${balance.immessa.toLocaleString("it-IT")} kWh`} />
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <h3>Composizione del beneficio annuo</h3>
+            <div className="card-note">Vendita energia (GSE): {quote.input.tariffaGSE} €/kWh · CER: {quote.input.tariffaCER} €/kWh</div>
+            <EconRow label="Risparmio bolletta" value={econ.risparmioBolletta} max={econ.risparmioBolletta} color="var(--c-good)" />
+            <EconRow label="Ricavo GSE (vendita)" value={econ.ricavoGSE} max={econ.risparmioBolletta} color="var(--c-f2)" />
+            <EconRow label="Ricavo CER" value={econ.ricavoCER} max={econ.risparmioBolletta} color="var(--c-f3)" />
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600 }}>Beneficio totale annuo</span>
+              <span className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--c-good)" }}>€ {econ.beneficioTotale.toLocaleString("it-IT")}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid-3" style={{ marginTop: 16 }}>
+          <div className="card"><StatMini v={`€ ${costoImpianto.toLocaleString("it-IT")}`} l="Costo impianto proposto (impianto + accumulo)" /></div>
+          <div className="card">
+            <StatMini v={`${payback ?? "—"} anni`} l="Tempo di rientro semplice" />
+            {payback && payback < 8 && <span className="pill good" style={{ marginTop: 8 }}>payback sotto gli 8 anni</span>}
+          </div>
+          <div className="card"><StatMini v={`${co2} t`} l="CO₂ evitata stimata / anno" /></div>
+        </div>
+
+        {monthlyConsumo && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <h3>Consumi (diurno/notturno) e produzione impianto — mese per mese</h3>
+            <div className="card-note">
+              {bollettaMode === "manuale"
+                ? "Consumi dalla tabella mensile inserita; produzione dal profilo mensile tipico applicato all'impianto proposto."
+                : "Consumo annuo distribuito in parti uguali sui 12 mesi (nessun dettaglio mensile disponibile dalla bolletta); produzione dal profilo mensile tipico applicato all'impianto proposto."}
+            </div>
+            <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
+          </div>
+        )}
+      </section>
+
+      <section className="block" id="d">
+        <div className="block-head"><span className="block-tag">D</span><h2>Dati di partenza</h2></div>
         <div className="grid-2">
           <div className="card">
             <h3>Ripartizione consumi per fascia oraria</h3>
@@ -569,166 +938,17 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
             <div className="grid-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
               <StatMini v={`€ ${quote.input.spesaAnnua.toLocaleString("it-IT")}`} l="Spesa annua attuale" />
               <StatMini v={`${quote.input.consumoAnnuoKwh.toLocaleString("it-IT")}`} l="kWh consumati/anno" />
-              <StatMini v={`€ ${quote.economics.prezzoMedio.toFixed(3)}`} l="Prezzo medio / kWh" />
-              <StatMini v={`${quote.input.f2Pct + quote.input.f3Pct}%`} l="Quota F2+F3 (indica utilità accumulo)" />
+              <StatMini v={`€ ${econ.prezzoMedio.toFixed(3)}`} l="Prezzo medio / kWh" />
+              <StatMini v={`${quote.input.f2Pct + quote.input.f3Pct}%`} l="Quota F2+F3" />
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="block" id="b">
-        <div className="block-head"><span className="block-tag">B</span><h2>Sito e producibilità</h2></div>
-        <div className="grid-2">
-          <div className="card">
-            <h3>Segmenti di tetto individuati</h3>
-            <div className="card-note">{quote.roof.imageryQuality || "N/D"} quality · rilievo {quote.roof.imageryDate || "n/d"}</div>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Segmento</th><th className="num">Area</th><th className="num">Pitch</th><th className="num">Azimuth</th><th className="num">Producibilità</th></tr></thead>
-                <tbody>
-                  {seg.map((s, i) => (
-                    <tr key={i}>
-                      <td><span className="seg-swatch" style={{ background: segColors[i % 3] }} />{s.nome}</td>
-                      <td className="num">{s.areaMeters2.toFixed(0)} m²</td>
-                      <td className="num">{s.pitchDegrees.toFixed(1)}°</td>
-                      <td className="num">{s.azimuthDegrees.toFixed(0)}°</td>
-                      <td className="num">{s.producibilitaSpecifica} kWh/kWp</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ marginTop: 14, display: "flex", gap: 20 }}>
-              <StatMini v={`${quote.roof.maxArrayPanelsCount ?? "—"}`} l="Pannelli max installabili (tetto)" />
-              <StatMini v={`${quote.roof.carbonOffsetFactorKgPerMwh ? Math.round(quote.roof.carbonOffsetFactorKgPerMwh) : "—"} kg/MWh`} l="Fattore offset CO₂ (zona)" />
-            </div>
-          </div>
-          <div className="card">
-            <h3>Produzione mensile stimata</h3>
-            <div className="card-note">{quote.sizing.kwp} kWp installati — fonte PVGIS</div>
-            <BarChart data={quote.production.monthlyKwh} />
-          </div>
-        </div>
-
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Foto satellitare e simulazione pannelli</h3>
-          <div className="card-note">
-            Foto aerea del sito e simulazione dell&apos;impianto proposto sul tetto, generate on demand dal layer RGB della Google Solar API (richiesta separata dal preventivo).
-          </div>
-
-          {!quote.roof.solarPanels?.length ? (
-            <div className="card-note" style={{ marginTop: 10 }}>
-              Non disponibile: {quote.demo
-                ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
-                : "la Solar API non ha restituito dati sui pannelli per questo sito."}
-            </div>
-          ) : !roofImages ? (
-            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={onGeneraFotoTetto} disabled={roofImagesLoading}>
-              {roofImagesLoading && <span className="spinner" />}
-              Genera foto tetto →
-            </button>
-          ) : (
-            <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 280px" }}>
-                <img src={roofImages.satelliteImageUrl} alt="Foto aerea del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-                <div className="card-note" style={{ marginTop: 6 }}>Foto aerea · rilievo {roofImages.imageryDate || "n/d"}</div>
-              </div>
-              <div style={{ flex: "1 1 280px" }}>
-                <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-                <div className="card-note" style={{ marginTop: 6 }}>
-                  Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
-                </div>
-              </div>
-            </div>
-          )}
-          {roofImagesError && <div className="error-box" style={{ marginTop: 10 }}>{roofImagesError}</div>}
-        </div>
-      </section>
-
-      <section className="block" id="c">
-        <div className="block-head"><span className="block-tag">C</span><h2>Dimensionamento impianto</h2></div>
-        <div className="grid-3">
-          <div className="card">
-            <h3>Impianto fotovoltaico</h3>
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
-              <StatMini v={`${quote.sizing.kwp} kWp`} l="Potenza installata proposta" />
-              <StatMini v={`≈ ${quote.sizing.pannelliStimati}`} l="Pannelli (moduli da 530 Wp)" />
-              <StatMini v={`${quote.sizing.areaOccupataStimataM2} m²`} l={`Area occupata su ${areaTot.toFixed(0)} m² disponibili`} />
-            </div>
-            {quote.sizing.limitatoDalTetto && <span className="pill warn" style={{ marginTop: 10 }}>dimensionamento limitato dal tetto</span>}
-          </div>
-          <div className="card">
-            <h3>Sistema di accumulo</h3>
-            {quote.sizing.hasBattery ? (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
-                <StatMini v={`${quote.sizing.batteriaKwh} kWh`} l="Capacità batteria consigliata" />
-                <StatMini v={`${quote.sizing.batteriaRapporto} kWh/kWp`} l="Rapporto capacità/potenza" />
-              </div>
-            ) : (
-              <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginTop: 12 }}>
-                Quota F2+F3 sotto il 30%: l&apos;accumulo non è prioritario per questo profilo di consumo.
-              </p>
-            )}
-          </div>
-          <div className="card">
-            <h3>Copertura del fabbisogno</h3>
-            <div style={{ marginTop: 12 }}>
-              <StatMini v={`${quote.production.coperturaFabbisognoPct}%`} l={`${(quote.production.annuaKwh / 1000).toFixed(1)} MWh prodotti su ${(quote.input.consumoAnnuoKwh / 1000).toFixed(1)} MWh consumati`} />
-              <div className="econ-track" style={{ marginTop: 12 }}>
-                <div className="econ-fill" style={{ width: `${Math.min(100, quote.production.coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="block" id="d">
-        <div className="block-head"><span className="block-tag">D</span><h2>Bilancio energetico ed economico</h2></div>
-        <div className="grid-2">
-          <div className="card">
-            <h3>Autoconsumo vs. immesso in rete</h3>
-            <div className="card-note">{(quote.production.annuaKwh / 1000).toFixed(1)} MWh prodotti/anno</div>
-            <div className="donut-row">
-              <Donut
-                values={[quote.balance.autoconsumoPct, 100 - quote.balance.autoconsumoPct]}
-                colors={["var(--c-good)", "var(--c-grid)"]}
-                centerLabel={`${quote.balance.autoconsumoPct}%`}
-                centerSub="autoconsumo"
-              />
-              <div className="legend">
-                <LegendItem color="var(--c-good)" label="Autoconsumato" value={`${quote.balance.autoconsumata.toLocaleString("it-IT")} kWh`} />
-                <LegendItem color="var(--c-grid)" label="Immesso in rete" value={`${quote.balance.immessa.toLocaleString("it-IT")} kWh`} />
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <h3>Composizione del beneficio annuo</h3>
-            <div className="card-note">Ritiro Dedicato GSE 2026: {quote.input.tariffaGSE} €/kWh · CER: {quote.input.tariffaCER} €/kWh</div>
-            <EconRow label="Risparmio bolletta" value={quote.economics.risparmioBolletta} max={quote.economics.risparmioBolletta} color="var(--c-good)" />
-            <EconRow label="Ricavo GSE (ritiro ded.)" value={quote.economics.ricavoGSE} max={quote.economics.risparmioBolletta} color="var(--c-f2)" />
-            <EconRow label="Ricavo CER" value={quote.economics.ricavoCER} max={quote.economics.risparmioBolletta} color="var(--c-f3)" />
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>Beneficio totale annuo</span>
-              <span className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--c-good)" }}>€ {quote.economics.beneficioTotale.toLocaleString("it-IT")}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid-3" style={{ marginTop: 16 }}>
-          <div className="card"><StatMini v={`~€ ${quote.investment.stimaEuro.toLocaleString("it-IT")}`} l="Investimento stimato (impianto + accumulo)" /></div>
-          <div className="card">
-            <StatMini v={`${quote.investment.paybackYears ?? "—"} anni`} l="Tempo di rientro semplice" />
-            {quote.investment.paybackYears && quote.investment.paybackYears < 8 && <span className="pill good" style={{ marginTop: 8 }}>payback sotto gli 8 anni</span>}
-          </div>
-          <div className="card"><StatMini v={`${quote.co2EvitataTonnellate} t`} l="CO₂ evitata stimata / anno" /></div>
         </div>
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> il Ritiro Dedicato GSE è impostato al valore ufficiale ARERA 2026 (0,0475 €/kWh); la tariffa CER
-        (0,075 €/kWh) è una media indicativa componente fissa + variabile, applicata per semplicità all&apos;intera energia immessa — nella realtà
-        si applica solo alla quota effettivamente condivisa entro la comunità energetica. Le percentuali di autoconsumo sono stime da curve
-        statistiche di settore, non da un profilo di carico orario reale. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. Le percentuali di autoconsumo sono stime da curve statistiche di settore, non da un profilo di carico orario reale. La tariffa CER
+        ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
+        si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
       </div>
 
@@ -768,6 +988,15 @@ function LegendItem({ color, label, value }) {
       <span className="legend-label">{label}</span>
       <span className="legend-val">{value}</span>
     </div>
+  );
+}
+
+function LegendDot({ color, label }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--ink-soft)" }}>
+      <span style={{ width: 10, height: 10, borderRadius: 3, background: color, display: "inline-block" }} />
+      {label}
+    </span>
   );
 }
 
@@ -817,22 +1046,67 @@ function Donut({ values, colors, centerLabel, centerSub }) {
 }
 
 function BarChart({ data }) {
-  const months = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
   const max = Math.max(...data, 1);
   return (
     <div className="barchart">
       {data.map((v, i) => (
         <div className="bar-col" key={i}>
-          <div className="bar" style={{ height: `${(v / max) * 100}%` }} title={`${months[i]} · ${(v / 1000).toFixed(1)} MWh`} />
-          <div className="bar-month">{months[i]}</div>
+          <div className="bar" style={{ height: `${(v / max) * 100}%` }} title={`${MESI_BREVI[i]} · ${(v / 1000).toFixed(1)} MWh`} />
+          <div className="bar-month">{MESI_BREVI[i]}</div>
         </div>
       ))}
     </div>
   );
 }
 
+// Grafico combinato consumi/produzione mensile: per ogni mese, una colonna
+// impilata diurno (sotto) + notturno (sopra) dei consumi, affiancata da una
+// colonna piena della produzione stimata dell'impianto — stessa scala kWh.
+function ComboChart({ diurno, notturno, produzione }) {
+  const totaliConsumo = diurno.map((d, i) => d + (notturno[i] || 0));
+  const max = Math.max(...totaliConsumo, ...produzione, 1);
+  return (
+    <div>
+      <div className="combo-legend">
+        <LegendDot color="var(--c-f1)" label="Consumo diurno" />
+        <LegendDot color="var(--c-f3)" label="Consumo notturno" />
+        <LegendDot color="var(--warn)" label="Produzione impianto" />
+      </div>
+      <div className="combo-chart">
+        {MESI_BREVI.map((m, i) => {
+          const d = diurno[i] || 0;
+          const n = notturno[i] || 0;
+          const p = produzione[i] || 0;
+          const totale = d + n;
+          return (
+            <div className="combo-month" key={m}>
+              <div className="combo-bars">
+                <div
+                  className="combo-bar-group"
+                  style={{ height: `${(totale / max) * 100}%` }}
+                  title={`${m} · consumo diurno ${Math.round(d).toLocaleString("it-IT")} kWh, notturno ${Math.round(n).toLocaleString("it-IT")} kWh`}
+                >
+                  <div style={{ flexGrow: n || 0, background: "var(--c-f3)" }} />
+                  <div style={{ flexGrow: d || 0, background: "var(--c-f1)" }} />
+                </div>
+                <div
+                  className="combo-bar-solid"
+                  style={{ height: `${(p / max) * 100}%` }}
+                  title={`${m} · produzione ${Math.round(p).toLocaleString("it-IT")} kWh`}
+                />
+              </div>
+              <div className="combo-month-label">{m}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RoofSvg({ segments, colors }) {
   // Rappresentazione schematica proporzionale alle aree reali (max 3 segmenti mostrati).
+  // Usata come fallback finché la foto satellitare non è pronta (o non disponibile).
   const top = segments.slice(0, 2);
   const bottom = segments.slice(2, 3);
   return (

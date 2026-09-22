@@ -193,6 +193,15 @@ th.num{ text-align:right; }
 .bar{ width:100%; max-width:26px; border-radius:4px 4px 2px 2px; background:var(--c-f1); }
 .bar-month{ font-size:10px; color:var(--ink-faint); margin-top:6px; font-family:"IBM Plex Mono"; }
 
+/* Grafico combinato consumi (diurno/notturno impilati) vs produzione mensile */
+.combo-legend{ display:flex; gap:18px; flex-wrap:wrap; margin-bottom:14px; }
+.combo-chart{ display:flex; align-items:flex-end; gap:16px; height:220px; padding-top:8px; overflow-x:auto; }
+.combo-month{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; flex:none; }
+.combo-bars{ display:flex; align-items:flex-end; gap:5px; height:100%; }
+.combo-bar-group{ width:22px; display:flex; flex-direction:column; border-radius:4px 4px 2px 2px; overflow:hidden; }
+.combo-bar-solid{ width:22px; border-radius:4px 4px 2px 2px; background:var(--warn); }
+.combo-month-label{ font-size:10px; color:var(--ink-faint); margin-top:8px; font-family:"IBM Plex Mono"; }
+
 .econ-row{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
 .econ-row:last-child{ margin-bottom:0; }
 .econ-label{ width:150px; flex:none; font-size:13px; color:var(--ink-soft); }
