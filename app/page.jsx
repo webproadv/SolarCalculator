@@ -593,8 +593,9 @@ export default function Page() {
                       <p className="hint">Letto dalla foto se leggibile, altrimenti inseriscilo qui.</p>
                     </div>
                     <div className="field">
-                      <label>Spesa energetica annua (€)</label>
+                      <label>Spesa energetica annua (€, IVA inclusa)</label>
                       <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
+                      <p className="hint">Come riportato in bolletta (IVA inclusa) — verrà depurata dell'IVA (22%) per i calcoli economici.</p>
                     </div>
                   </div>
                 </>
@@ -644,10 +645,11 @@ export default function Page() {
                   )}
 
                   <div className="field" style={{ marginTop: 20, maxWidth: 320 }}>
-                    <label>Spesa energetica annua (€)</label>
+                    <label>Spesa energetica annua (€, IVA inclusa)</label>
                     <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
                     <p className="hint">
-                      Prezzo medio stimato: {spesaAnnua && monthlyTotalsCalc.total ? `€ ${(Number(spesaAnnua) / monthlyTotalsCalc.total).toFixed(3)}/kWh` : "—"}
+                      Come riportato in bolletta (IVA inclusa) — verrà depurata dell'IVA (22%) per i calcoli economici.
+                      {" "}Prezzo medio stimato (IVA esclusa): {spesaAnnua && monthlyTotalsCalc.total ? `€ ${(Number(spesaAnnua) / (1 + DEFAULTS.ivaBolletta) / monthlyTotalsCalc.total).toFixed(3)}/kWh` : "—"}
                     </p>
                   </div>
                 </>
@@ -840,7 +842,7 @@ function Dashboard({
             <dl className="meta-grid">
               <div className="meta-item"><dt>Partita IVA</dt><dd className="mono">{company.piva}</dd></div>
               <div className="meta-item"><dt>Coordinate sito</dt><dd className="mono">{company.lat.toFixed(4)}, {company.lng.toFixed(4)}</dd></div>
-              <div className="meta-item"><dt>Spesa energetica annua</dt><dd className="mono">€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd></div>
+              <div className="meta-item"><dt>Spesa energetica annua (IVA inclusa)</dt><dd className="mono">€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd></div>
               <div className="meta-item"><dt>Consumo annuo</dt><dd className="mono">{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</dd></div>
             </dl>
           </div>
@@ -996,12 +998,14 @@ function Dashboard({
           </div>
           <div className="card">
             <h3>Composizione del beneficio annuo</h3>
-            <div className="card-note">Vendita energia (GSE): {quote.input.tariffaGSE} €/kWh · CER: {quote.input.tariffaCER} €/kWh</div>
+            <div className="card-note">
+              Tutti i valori IVA esclusa — costo energia: € {econ.prezzoMedio.toFixed(3)}/kWh (da spesa annua € {econ.spesaAnnuaNetta.toLocaleString("it-IT")} netta) · Vendita energia (GSE): {quote.input.tariffaGSE} €/kWh · CER: {quote.input.tariffaCER} €/kWh
+            </div>
             <EconRow label="Risparmio bolletta" value={econ.risparmioBolletta} max={econ.risparmioBolletta} color="var(--c-good)" />
             <EconRow label="Ricavo GSE (vendita)" value={econ.ricavoGSE} max={econ.risparmioBolletta} color="var(--c-f2)" />
             <EconRow label="Ricavo CER" value={econ.ricavoCER} max={econ.risparmioBolletta} color="var(--c-f3)" />
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13.5, fontWeight: 600 }}>Beneficio totale annuo</span>
+              <span style={{ fontSize: 13.5, fontWeight: 600 }}>Beneficio totale annuo (IVA esclusa)</span>
               <span className="mono" style={{ fontSize: 20, fontWeight: 700, color: "var(--c-good)" }}>€ {econ.beneficioTotale.toLocaleString("it-IT")}</span>
             </div>
           </div>
