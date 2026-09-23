@@ -112,9 +112,6 @@ export default function Page() {
   const [companyError, setCompanyError] = useState("");
 
   // Step 2 — bolletta / fasce / consumo totale / spesa / produzione FV / giorni lavorativi
-  const [f1Pct, setF1Pct] = useState(55);
-  const [f2Pct, setF2Pct] = useState(25);
-  const [f3Pct, setF3Pct] = useState(20);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrNote, setOcrNote] = useState("");
   // Andamento mensile dei consumi (12 kWh, gennaio→dicembre) se leggibile dal
@@ -128,12 +125,22 @@ export default function Page() {
   const [bollettaMode, setBollettaMode] = useState("foto"); // "foto" | "manuale"
   const [monthly, setMonthly] = useState(MESI.map(() => ({ f1: "", f2: "", f3: "" })));
 
-  // In modalità "manuale" il consumo annuo è calcolato automaticamente dalla
-  // tabella mensile; in modalità "foto" viene letto dalla bolletta (OCR) se
-  // disponibile, altrimenti inserito qui a mano. La spesa annua, la
-  // produzione annua FV e i giorni lavorativi si inseriscono sempre in
-  // questa stessa schermata, in entrambe le modalità.
-  const [consumoAnnuoKwh, setConsumoAnnuoKwh] = useState("");
+  // Modalità "foto": F1/F2/F3 in kWh — precompilati dall'OCR della bolletta
+  // quando possibile, sempre presentati in una tabella di verifica che
+  // l'utente può correggere a mano prima di confermare. Il totale annuo si
+  // calcola sempre in automatico come somma delle tre fasce (mai inserito
+  // direttamente). In modalità "manuale" il consumo annuo deriva invece
+  // dalla tabella mensile (vedi monthlyTotalsCalc).
+  const [fotoF1Kwh, setFotoF1Kwh] = useState("");
+  const [fotoF2Kwh, setFotoF2Kwh] = useState("");
+  const [fotoF3Kwh, setFotoF3Kwh] = useState("");
+  // true quando l'utente ha verificato/confermato la tabella qui sopra: solo
+  // da quel momento si può proseguire con produzione FV/giorni lavorativi e
+  // generare il preventivo (validazione dei dati richiesta dal cliente).
+  const [fotoConfermato, setFotoConfermato] = useState(false);
+
+  // La spesa annua, la produzione annua FV e i giorni lavorativi si
+  // inseriscono sempre in questa stessa schermata, in entrambe le modalità.
   const [spesaAnnua, setSpesaAnnua] = useState("");
   const [produzioneAnnuaFvKwh, setProduzioneAnnuaFvKwh] = useState("");
   const [giorniLavorativi, setGiorniLavorativi] = useState(5);
@@ -214,27 +221,13 @@ export default function Page() {
     setCompany((prev) => ({ ...prev, [key]: value }));
   }
 
-  function normalizeF(next, changed) {
-    // Mantiene la somma a 100 riequilibrando le altre due fasce proporzionalmente.
-    const others = ["f1", "f2", "f3"].filter((k) => k !== changed);
-    const remaining = 100 - next[changed];
-    const currentOthersSum = others.reduce((s, k) => s + next[k], 0) || 1;
-    others.forEach((k) => {
-      next[k] = Math.round((next[k] / currentOthersSum) * remaining);
-    });
-    // Correzione arrotondamento sull'ultimo
-    const sum = next.f1 + next.f2 + next.f3;
-    if (sum !== 100) next[others[others.length - 1]] += 100 - sum;
-    return next;
-  }
-
-  function onFasciaChange(key, value) {
-    const current = { f1: f1Pct, f2: f2Pct, f3: f3Pct };
-    current[key] = Number(value);
-    const balanced = normalizeF(current, key);
-    setF1Pct(balanced.f1);
-    setF2Pct(balanced.f2);
-    setF3Pct(balanced.f3);
+  // Aggiorna un campo della tabella di verifica bolletta (F1/F2/F3 in kWh o
+  // spesa annua): qualunque modifica manuale dopo una conferma la annulla,
+  // così il tasto torna a "Conferma" e la validazione riflette sempre
+  // l'ultimo valore effettivamente confermato dall'utente.
+  function updateFotoValore(setter, value) {
+    setter(value);
+    setFotoConfermato(false);
   }
 
   async function onBollettaUpload(file) {
@@ -243,29 +236,43 @@ export default function Page() {
     setOcrLoading(true);
     setOcrNote("");
     setOcrMonthlyKwh(null);
+    setFotoConfermato(false);
     try {
       const fd = new FormData();
       fd.append("bolletta", file);
       const r = await fetch("/api/ocr-bolletta", { method: "POST", body: fd });
       const data = await r.json();
       if (data.available === false) {
-        setOcrNote("Lettura automatica non configurata su questa istanza (manca ANTHROPIC_API_KEY): imposta i valori manualmente qui sotto.");
+        setOcrNote("Lettura automatica non configurata su questa istanza (manca ANTHROPIC_API_KEY): imposta i valori manualmente nella tabella qui sotto.");
       } else if (data.error) {
-        setOcrNote(`Lettura automatica non riuscita (${data.error}). Imposta i valori manualmente.`);
+        setOcrNote(`Lettura automatica non riuscita (${data.error}). Imposta i valori manualmente nella tabella qui sotto.`);
       } else {
         const letti = [];
-        if (typeof data.f1_pct === "number" && typeof data.f2_pct === "number") {
-          setF1Pct(Math.round(data.f1_pct));
-          setF2Pct(Math.round(data.f2_pct));
-          setF3Pct(Math.round(100 - Math.round(data.f1_pct) - Math.round(data.f2_pct)));
-          letti.push("ripartizione F1/F2/F3");
+        const havePct = typeof data.f1_pct === "number" && typeof data.f2_pct === "number";
+        const haveTotale = typeof data.consumo_annuo_kwh === "number" && data.consumo_annuo_kwh > 0;
+
+        // Le fasce kWh si possono precompilare solo avendo sia le percentuali
+        // sia il consumo annuo (entrambi letti dalla bolletta): altrimenti si
+        // lasciano vuote e l'utente le verifica/inserisce a mano in tabella.
+        if (havePct && haveTotale) {
+          const totale = Math.round(data.consumo_annuo_kwh);
+          const p1 = Math.round(data.f1_pct);
+          const p2 = Math.round(data.f2_pct);
+          const kwh1 = Math.round((p1 / 100) * totale);
+          const kwh2 = Math.round((p2 / 100) * totale);
+          const kwh3 = Math.max(0, totale - kwh1 - kwh2);
+          setFotoF1Kwh((prev) => (prev ? prev : String(kwh1)));
+          setFotoF2Kwh((prev) => (prev ? prev : String(kwh2)));
+          setFotoF3Kwh((prev) => (prev ? prev : String(kwh3)));
+          letti.push("ripartizione F1/F2/F3", "consumo annuo");
+        } else if (haveTotale) {
+          letti.push(`consumo annuo (${Math.round(data.consumo_annuo_kwh).toLocaleString("it-IT")} kWh — ripartiscilo tu tra le fasce in tabella)`);
+        } else if (havePct) {
+          letti.push("ripartizione F1/F2/F3 in percentuale (inserisci anche i kWh assoluti per fascia in tabella)");
         }
-        // Precompila consumo/spesa solo se l'utente non ha già inserito un
+
+        // Precompila la spesa solo se l'utente non ha già inserito un
         // valore, per non sovrascrivere una correzione manuale.
-        if (typeof data.consumo_annuo_kwh === "number") {
-          setConsumoAnnuoKwh((prev) => (prev ? prev : String(Math.round(data.consumo_annuo_kwh))));
-          letti.push("consumo annuo");
-        }
         if (typeof data.spesa_annua_euro === "number") {
           setSpesaAnnua((prev) => (prev ? prev : String(Math.round(data.spesa_annua_euro))));
           letti.push("spesa annua");
@@ -276,12 +283,12 @@ export default function Page() {
         }
         setOcrNote(
           letti.length
-            ? `Valori letti automaticamente dalla bolletta (${letti.join(", ")} — confidenza: ${data.confidence || "n/d"}). Controlla e correggi se necessario.`
-            : `Non è stato possibile leggere valori affidabili dalla foto (confidenza: ${data.confidence || "n/d"}). Inserisci i dati manualmente.`
+            ? `Valori letti automaticamente dalla bolletta (${letti.join(", ")} — confidenza: ${data.confidence || "n/d"}). Controlla e correggi nella tabella qui sotto, poi conferma.`
+            : `Non è stato possibile leggere valori affidabili dalla foto (confidenza: ${data.confidence || "n/d"}). Inserisci i dati manualmente nella tabella qui sotto.`
         );
       }
     } catch (err) {
-      setOcrNote(`Errore durante la lettura automatica: ${err.message}. Imposta i valori manualmente.`);
+      setOcrNote(`Errore durante la lettura automatica: ${err.message}. Imposta i valori manualmente nella tabella qui sotto.`);
     } finally {
       setOcrLoading(false);
     }
@@ -326,14 +333,22 @@ export default function Page() {
     const usaManuale = bollettaMode === "manuale";
     const totali = monthlyTotals(monthly);
     const pctCalcolate = pctFromTotals(totali);
+    const totaliFoto = {
+      f1: Number(fotoF1Kwh) || 0,
+      f2: Number(fotoF2Kwh) || 0,
+      f3: Number(fotoF3Kwh) || 0,
+    };
+    totaliFoto.total = totaliFoto.f1 + totaliFoto.f2 + totaliFoto.f3;
+    const pctFoto = pctFromTotals(totaliFoto);
 
     // In modalità manuale il consumo e le percentuali derivano sempre dalla
     // tabella mensile (calcolati, non richiesti di nuovo); in modalità foto
-    // si usano i valori (letti o corretti a mano) di questa schermata.
-    const consumoEffettivo = usaManuale ? totali.total : Number(consumoAnnuoKwh);
-    const f1Effettivo = usaManuale ? pctCalcolate.f1 : f1Pct;
-    const f2Effettivo = usaManuale ? pctCalcolate.f2 : f2Pct;
-    const f3Effettivo = usaManuale ? pctCalcolate.f3 : f3Pct;
+    // derivano dalla tabella di verifica F1/F2/F3 (letta o corretta a mano e
+    // poi confermata) di questa schermata.
+    const consumoEffettivo = usaManuale ? totali.total : totaliFoto.total;
+    const f1Effettivo = usaManuale ? pctCalcolate.f1 : pctFoto.f1;
+    const f2Effettivo = usaManuale ? pctCalcolate.f2 : pctFoto.f2;
+    const f3Effettivo = usaManuale ? pctCalcolate.f3 : pctFoto.f3;
     const giorniEffettivi = Number(giorniLavorativi) || 5;
 
     try {
@@ -376,9 +391,21 @@ export default function Page() {
   const monthlyTotalsCalc = monthlyTotals(monthly);
   const monthlyPctCalc = pctFromTotals(monthlyTotalsCalc);
 
-  const consumoValido = bollettaMode === "manuale" ? monthlyTotalsCalc.total > 0 : Number(consumoAnnuoKwh) > 0;
+  const fotoTotalsCalc = {
+    f1: Number(fotoF1Kwh) || 0,
+    f2: Number(fotoF2Kwh) || 0,
+    f3: Number(fotoF3Kwh) || 0,
+  };
+  fotoTotalsCalc.total = fotoTotalsCalc.f1 + fotoTotalsCalc.f2 + fotoTotalsCalc.f3;
+  const fotoPctCalc = pctFromTotals(fotoTotalsCalc);
+
+  const consumoValido = bollettaMode === "manuale" ? monthlyTotalsCalc.total > 0 : fotoTotalsCalc.total > 0;
   const spesaValida = Number(spesaAnnua) > 0;
   const produzioneValida = Number(produzioneAnnuaFvKwh) > 0;
+  // In modalità foto occorre anche aver verificato/confermato la tabella
+  // prima di poter proseguire con produzione FV/giorni lavorativi e generare
+  // il preventivo (validazione dei dati richiesta dal cliente).
+  const puoProseguireOltreBolletta = bollettaMode === "manuale" || fotoConfermato;
 
   return (
     <>
@@ -564,38 +591,101 @@ export default function Page() {
 
                   <div style={{ marginTop: 22 }}>
                     <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 12 }}>
-                      Ripartizione consumi per fascia
+                      Verifica i valori letti dalla bolletta
                     </label>
-                    <div className="fascia-row">
-                      <span className="seg-swatch" style={{ background: "var(--c-f1)" }} />
-                      <label>F1 — punta</label>
-                      <input type="range" min="0" max="100" value={f1Pct} onChange={(e) => onFasciaChange("f1", e.target.value)} />
-                      <span className="val mono">{f1Pct}%</span>
+                    <p className="hint" style={{ marginBottom: 12 }}>
+                      Controlla i kWh per fascia e la spesa annua e correggili se necessario: il totale annuo si calcola da solo e non è modificabile. Poi conferma per proseguire.
+                    </p>
+                    <div className="mensile-table-wrap">
+                      <table className="mensile-table">
+                        <tbody>
+                          <tr>
+                            <td style={{ textAlign: "left" }}><span className="seg-swatch" style={{ background: "var(--c-f1)" }} /> F1 — punta (kWh)</td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={fotoF1Kwh}
+                                disabled={fotoConfermato}
+                                onChange={(e) => updateFotoValore(setFotoF1Kwh, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style={{ textAlign: "left" }}><span className="seg-swatch" style={{ background: "var(--c-f2)" }} /> F2 — intermedia (kWh)</td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={fotoF2Kwh}
+                                disabled={fotoConfermato}
+                                onChange={(e) => updateFotoValore(setFotoF2Kwh, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style={{ textAlign: "left" }}><span className="seg-swatch" style={{ background: "var(--c-f3)" }} /> F3 — fuori punta (kWh)</td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                placeholder="0"
+                                value={fotoF3Kwh}
+                                disabled={fotoConfermato}
+                                onChange={(e) => updateFotoValore(setFotoF3Kwh, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style={{ textAlign: "left", fontWeight: 700 }}>Totale annuo (kWh) — automatico</td>
+                            <td>
+                              <input type="text" className="mono" value={fotoTotalsCalc.total.toLocaleString("it-IT")} readOnly disabled style={{ fontWeight: 700 }} />
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style={{ textAlign: "left" }}>Spesa energetica annua (€, IVA inclusa)</td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="es. 45000"
+                                value={spesaAnnua}
+                                disabled={fotoConfermato}
+                                onChange={(e) => updateFotoValore(setSpesaAnnua, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="fascia-row">
-                      <span className="seg-swatch" style={{ background: "var(--c-f2)" }} />
-                      <label>F2 — intermedia</label>
-                      <input type="range" min="0" max="100" value={f2Pct} onChange={(e) => onFasciaChange("f2", e.target.value)} />
-                      <span className="val mono">{f2Pct}%</span>
-                    </div>
-                    <div className="fascia-row">
-                      <span className="seg-swatch" style={{ background: "var(--c-f3)" }} />
-                      <label>F3 — fuori punta</label>
-                      <input type="range" min="0" max="100" value={f3Pct} onChange={(e) => onFasciaChange("f3", e.target.value)} />
-                      <span className="val mono">{f3Pct}%</span>
-                    </div>
-                  </div>
+                    {fotoTotalsCalc.total > 0 && (
+                      <p className="hint" style={{ marginTop: 10 }}>
+                        Ripartizione calcolata: F1 {fotoPctCalc.f1}% · F2 {fotoPctCalc.f2}% · F3 {fotoPctCalc.f3}%
+                      </p>
+                    )}
+                    <p className="hint">Spesa come riportata in bolletta (IVA inclusa) — verrà depurata dell'IVA (22%) per i calcoli economici.</p>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22 }}>
-                    <div className="field">
-                      <label>Consumo annuo (kWh)</label>
-                      <input type="number" min="0" placeholder="es. 180000" value={consumoAnnuoKwh} onChange={(e) => setConsumoAnnuoKwh(e.target.value)} />
-                      <p className="hint">Letto dalla foto se leggibile, altrimenti inseriscilo qui.</p>
-                    </div>
-                    <div className="field">
-                      <label>Spesa energetica annua (€, IVA inclusa)</label>
-                      <input type="number" min="0" placeholder="es. 45000" value={spesaAnnua} onChange={(e) => setSpesaAnnua(e.target.value)} />
-                      <p className="hint">Come riportato in bolletta (IVA inclusa) — verrà depurata dell'IVA (22%) per i calcoli economici.</p>
+                    <div className="btn-row" style={{ marginTop: 14 }}>
+                      <span />
+                      {fotoConfermato ? (
+                        <button type="button" className="btn btn-ghost" onClick={() => setFotoConfermato(false)}>
+                          ✏️ Modifica dati
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={!(fotoTotalsCalc.total > 0 && spesaValida)}
+                          onClick={() => setFotoConfermato(true)}
+                        >
+                          ✓ Conferma dati bolletta
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>
@@ -655,41 +745,55 @@ export default function Page() {
                 </>
               )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
-                <div className="field">
-                  <label>Produzione annuale FV (kWh/kWp)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="es. 1350"
-                    value={produzioneAnnuaFvKwh}
-                    onChange={(e) => setProduzioneAnnuaFvKwh(e.target.value)}
-                  />
-                  <p className="hint">Producibilità specifica annua del sito (es. da PVGIS o da una tua stima): kWh prodotti per ogni kWp installato.</p>
-                </div>
-                <div className="field">
-                  <label>Giorni lavorativi</label>
-                  <select value={giorniLavorativi} onChange={(e) => setGiorniLavorativi(Number(e.target.value))}>
-                    <option value={5}>5 giorni (lun–ven)</option>
-                    <option value={6}>6 giorni (lun–sab)</option>
-                    <option value={7}>7 giorni (tutti i giorni)</option>
-                  </select>
-                  <p className="hint">Usato per calcolare il fabbisogno diurno e notturno dell&apos;azienda.</p>
-                </div>
-              </div>
+              {puoProseguireOltreBolletta ? (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+                    <div className="field">
+                      <label>Produzione annuale FV (kWh/kWp)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="es. 1350"
+                        value={produzioneAnnuaFvKwh}
+                        onChange={(e) => setProduzioneAnnuaFvKwh(e.target.value)}
+                      />
+                      <p className="hint">Producibilità specifica annua del sito (es. da PVGIS o da una tua stima): kWh prodotti per ogni kWp installato.</p>
+                    </div>
+                    <div className="field">
+                      <label>Giorni lavorativi</label>
+                      <select value={giorniLavorativi} onChange={(e) => setGiorniLavorativi(Number(e.target.value))}>
+                        <option value={5}>5 giorni (lun–ven)</option>
+                        <option value={6}>6 giorni (lun–sab)</option>
+                        <option value={7}>7 giorni (tutti i giorni)</option>
+                      </select>
+                      <p className="hint">Usato per calcolare il fabbisogno diurno e notturno dell&apos;azienda.</p>
+                    </div>
+                  </div>
 
-              {quoteError && <div className="error-box" style={{ marginTop: 16 }}>{quoteError}</div>}
-              <div className="btn-row">
-                <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
-                <button
-                  className="btn btn-primary"
-                  disabled={quoteLoading || !consumoValido || !spesaValida || !produzioneValida}
-                  onClick={generaPreventivo}
-                >
-                  {quoteLoading && <span className="spinner" />}
-                  Genera preventivo →
-                </button>
-              </div>
+                  {quoteError && <div className="error-box" style={{ marginTop: 16 }}>{quoteError}</div>}
+                  <div className="btn-row">
+                    <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
+                    <button
+                      className="btn btn-primary"
+                      disabled={quoteLoading || !consumoValido || !spesaValida || !produzioneValida}
+                      onClick={generaPreventivo}
+                    >
+                      {quoteLoading && <span className="spinner" />}
+                      Genera preventivo →
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="info-box" style={{ marginTop: 18 }}>
+                    Verifica e conferma la tabella dei dati bolletta qui sopra per continuare.
+                  </div>
+                  <div className="btn-row">
+                    <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
+                    <span />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
