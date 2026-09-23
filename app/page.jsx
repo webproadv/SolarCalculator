@@ -6,8 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import {
   DEFAULTS,
   diurnoNotturno,
-  estimateSelfConsumption,
-  energyBalance,
+  simulaAutoconsumoMensile,
   economics,
   paybackYears,
   co2Evitata,
@@ -63,7 +62,7 @@ function applyMonthlyShape(totaleAnnuo, pesi) {
 // dashboard — calcolato sempre a partire dai totali confermati nel
 // preventivo (quote.input), mai da una copia locale separata, in modo che la
 // colonna dei consumi rispecchi esattamente i dati inseriti nel form
-// iniziale (stessi numeri della card "Profilo di consumo" in dashboard).
+// iniziale (stessi numeri della card "Riepilogo consumi" in Sezione B).
 // In modalità "manuale" usa i kWh realmente inseriti nella tabella mensile.
 // In modalità "foto": se la bolletta caricata conteneva un grafico
 // dell'andamento dei consumi mese per mese ed è stato letto con successo
@@ -774,16 +773,20 @@ function Dashboard({
   const produzioneAnnuaTotaleKwh = kwp * (quote.input.produzioneAnnuaFvKwh || 0);
   const monthlyProduction = monthlyProductionFromShares(produzioneAnnuaTotaleKwh);
 
-  const autoconsumoFrac = quote.input.consumoAnnuoKwh
-    ? estimateSelfConsumption({
-        hasBattery,
-        kwp,
-        consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
-        producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh,
-      })
-    : 0;
-  const autoconsumoPct = Math.round(autoconsumoFrac * 1000) / 10; // percentuale, 1 decimale
-  const balance = energyBalance({ producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh, autoconsumoPct: autoconsumoFrac });
+  const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, bollettaMode, ocrMonthlyKwh });
+  const monthlyDiurno = monthlyConsumo.map((m) => m.diurno);
+  const monthlyNotturno = monthlyConsumo.map((m) => m.notturno);
+
+  // Autoconsumo: simulazione mese per mese (MIN tra produzione e consumo
+  // diurno + quanto l'accumulo può spostare dal giorno alla notte), non più
+  // una stima forfettaria — vedi lib/calc.js:simulaAutoconsumoMensile.
+  const autoconsumoSim = simulaAutoconsumoMensile({
+    monthlyProduzioneKwh: monthlyProduction,
+    monthlyConsumoDiurnoKwh: monthlyDiurno,
+    batteriaKwh,
+  });
+  const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
+  const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
     spesaAnnua: quote.input.spesaAnnua,
     consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
@@ -802,10 +805,6 @@ function Dashboard({
     : 0;
   const pannelliStimati = Math.round((kwp * 1000) / DEFAULTS.panelWp);
   const areaUtileStimataM2 = Math.round(kwp * DEFAULTS.mqPerKwp);
-
-  const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, bollettaMode, ocrMonthlyKwh });
-  const monthlyDiurno = monthlyConsumo.map((m) => m.diurno);
-  const monthlyNotturno = monthlyConsumo.map((m) => m.notturno);
 
   return (
     <div className="wrap">
@@ -873,19 +872,6 @@ function Dashboard({
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 20 }}>
-        <h3>Profilo di consumo</h3>
-        <div className="card-note">Consumi annui per fascia oraria e ripartizione diurno/notturno, calcolati dai dati inseriti nello step Consumi</div>
-        <div className="grid-3" style={{ marginTop: 4 }}>
-          <StatMini v={`${quote.input.f1Kwh.toLocaleString("it-IT")} kWh`} l={`F1 — punta (${quote.input.f1Pct}%)`} />
-          <StatMini v={`${quote.input.f2Kwh.toLocaleString("it-IT")} kWh`} l={`F2 — intermedia (${quote.input.f2Pct}%)`} />
-          <StatMini v={`${quote.input.f3Kwh.toLocaleString("it-IT")} kWh`} l={`F3 — fuori punta (${quote.input.f3Pct}%)`} />
-          <StatMini v={`${quote.input.consumoDiurnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo diurno" />
-          <StatMini v={`${quote.input.consumoNotturnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo notturno" />
-          <StatMini v={`${quote.input.giorniLavorativi} giorni/sett.`} l="Giorni lavorativi dichiarati" />
-        </div>
-      </div>
-
       <section className="block" id="a">
         <div className="block-head"><span className="block-tag">A</span><h2>Producibilità fotovoltaica</h2></div>
         <div className="grid-2">
@@ -933,45 +919,45 @@ function Dashboard({
 
       <section className="block" id="b">
         <div className="block-head"><span className="block-tag">B</span><h2>Dimensionamento impianto</h2></div>
-        <div className="grid-3">
-          <div className="card">
-            <h3>Impianto proposto</h3>
-            <div className="suggested-box">
-              <div className="v">{quote.sizing.kwpSuggerito} kWp</div>
-              <div className="l">Impianto suggerito (consumo totale ÷ produzione annua FV)</div>
-            </div>
-            <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
-              <label>Impianto proposto (kWp)</label>
+
+        <div className="card">
+          <h3>Riepilogo consumi</h3>
+          <div className="card-note">Consumi annui per fascia oraria e diurno/notturno, calcolati dai dati inseriti nello step Consumi — e dimensionamento consigliato di conseguenza</div>
+          <div className="grid-3" style={{ marginTop: 4 }}>
+            <StatMini v={`${quote.input.f1Kwh.toLocaleString("it-IT")} kWh`} l={`Totale F1 — punta (${quote.input.f1Pct}%)`} />
+            <StatMini v={`${quote.input.f2Kwh.toLocaleString("it-IT")} kWh`} l={`Totale F2 — intermedia (${quote.input.f2Pct}%)`} />
+            <StatMini v={`${quote.input.f3Kwh.toLocaleString("it-IT")} kWh`} l={`Totale F3 — fuori punta (${quote.input.f3Pct}%)`} />
+            <StatMini v={`${quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh`} l="Consumo totale" />
+            <StatMini v={`${quote.input.giorniLavorativi} giorni/sett.`} l="Giorni lavorativi dichiarati" />
+            <StatMini v={`${quote.input.consumoDiurnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo diurno" />
+            <StatMini v={`${quote.input.consumoNotturnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo notturno" />
+            <StatMini v={`${quote.sizing.kwpSuggerito} kWp`} l="Potenza impianto consigliata (consumo totale ÷ produzione annua FV)" />
+            <StatMini v={`${quote.sizing.accumuloSuggeritoKwh} kWh`} l="Potenza accumulo consigliata (consumo notturno ÷ 360)" />
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Impianto proposto</h3>
+          <div className="card-note">Valori modificabili — da questi dipendono produzione, autoconsumo, benefici e payback qui sotto</div>
+          <div className="grid-3" style={{ marginTop: 4 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Potenza impianto proposta (kWp)</label>
               <input type="number" min="0" step="0.1" value={impiantoProposto} onChange={(e) => setImpiantoProposto(e.target.value)} />
             </div>
-          </div>
-          <div className="card">
-            <h3>Accumulo proposto</h3>
-            <div className="suggested-box">
-              <div className="v">{quote.sizing.accumuloSuggeritoKwh} kWh</div>
-              <div className="l">Accumulo suggerito (consumo notturno ÷ 365)</div>
-            </div>
-            <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
-              <label>Accumulo proposto (kWh)</label>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Potenza accumulo proposta (kWh)</label>
               <input type="number" min="0" step="1" value={accumuloProposto} onChange={(e) => setAccumuloProposto(e.target.value)} />
+              {!hasBattery && <p className="hint">Nessun accumulo previsto con il valore attuale.</p>}
             </div>
-            {!hasBattery && (
-              <p className="hint" style={{ marginTop: 10 }}>Nessun accumulo previsto con il valore attuale.</p>
-            )}
-          </div>
-          <div className="card">
-            <h3>Costo impianto proposto</h3>
-            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
               <label>Costo impianto proposto (€)</label>
               <input type="number" min="0" step="100" value={costoImpiantoProposto} onChange={(e) => setCostoImpiantoProposto(e.target.value)} />
               <p className="hint">Stima di riferimento: € {quote.sizing.investimentoSuggerito.toLocaleString("it-IT")} — modificalo con il prezzo reale del preventivo.</p>
             </div>
-            <div style={{ marginTop: 6 }}>
-              <StatMini v={`${coperturaFabbisognoPct}%`} l="Copertura del fabbisogno" />
-              <div className="econ-track" style={{ marginTop: 10 }}>
-                <div className="econ-fill" style={{ width: `${Math.min(100, coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
-              </div>
-            </div>
+          </div>
+          <div className="suggested-box" style={{ marginTop: 16 }}>
+            <div className="v">{autoconsumoPct}%</div>
+            <div className="l">Percentuale di autoconsumo ottenuta (simulazione mensile: produzione vs. consumo diurno + accumulo)</div>
           </div>
         </div>
 
@@ -981,7 +967,10 @@ function Dashboard({
           <div className="grid-3" style={{ marginTop: 4 }}>
             <StatMini v={`≈ ${pannelliStimati}`} l="Pannelli da installare (moduli da 505 Wp)" />
             <StatMini v={`≈ ${areaUtileStimataM2} m²`} l="Superficie utile richiesta (≈4,1 m²/kWp)" />
-            <StatMini v={`${autoconsumoPct}%`} l="Percentuale di autoconsumo stimata" />
+            <StatMini v={`${coperturaFabbisognoPct}%`} l="Copertura del fabbisogno" />
+          </div>
+          <div className="econ-track" style={{ marginTop: 10 }}>
+            <div className="econ-fill" style={{ width: `${Math.min(100, coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
           </div>
         </div>
       </section>
@@ -1031,8 +1020,10 @@ function Dashboard({
           <h3>Consumi (diurno/notturno) e produzione impianto — mese per mese</h3>
           <div className="card-note">
             {bollettaMode === "manuale"
-              ? "Consumi dalla tabella mensile inserita nello step Consumi (stessi dati della card “Profilo di consumo” qui sopra); produzione dal profilo mensile tipico applicato all'impianto proposto."
-              : "Consumo diurno/notturno annuo confermato nel preventivo (card “Profilo di consumo” qui sopra), distribuito in parti uguali sui 12 mesi — nessun dettaglio mensile disponibile dalla bolletta; produzione dal profilo mensile tipico applicato all'impianto proposto."}
+              ? "Consumi dalla tabella mensile inserita nello step Consumi (stessi totali della card “Riepilogo consumi” nella Sezione B); produzione dal profilo mensile tipico applicato all'impianto proposto."
+              : ocrMonthlyKwh
+              ? "Andamento mensile letto dalla bolletta caricata, riproporzionato sul consumo annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B); produzione dal profilo mensile tipico applicato all'impianto proposto."
+              : "Consumo diurno/notturno annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B), distribuito sui 12 mesi secondo una stagionalità tipica — nessun andamento mensile disponibile dalla bolletta; produzione dal profilo mensile tipico applicato all'impianto proposto."}
           </div>
           <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
         </div>
