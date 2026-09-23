@@ -32,10 +32,10 @@ Nessuna chiave è inclusa nel repository: vanno impostate separatamente da chi e
 
 ## Foto satellitare e simulazione pannelli sul tetto
 
-Appena la dashboard è pronta, l'app genera **automaticamente** (nessun bottone da premere) due immagini, mostrate in alto in dashboard e nella sezione A ("Producibilità fotovoltaica"):
+Appena la dashboard è pronta, l'app genera **automaticamente** (nessun bottone da premere) due immagini a partire dallo stesso layer RGB:
 
-1. la foto aerea "pulita" del sito;
-2. la stessa foto con sovrimpressi i pannelli dell'impianto proposto (in verde, i primi N per producibilità, N = pannelli stimati dall'impianto suggerito al momento del calcolo) e il resto del layout massimo installabile come riferimento (in grigio). Se l'utente modifica in seguito il campo "Impianto proposto" in dashboard, questa simulazione fotografica non si rigenera automaticamente (il numero di pannelli evidenziati resta quello del valore suggerito iniziale).
+1. la foto aerea "pulita" del sito — mostrata una sola volta, in alto in dashboard (riquadro anagrafica azienda);
+2. la stessa foto con sovrimpressi i pannelli dell'impianto proposto (in verde, i primi N per producibilità, N = pannelli stimati dall'impianto suggerito al momento del calcolo) e il resto del layout massimo installabile come riferimento (in grigio) — mostrata nella sezione A ("Producibilità fotovoltaica"). Se l'utente modifica in seguito il campo "Impianto proposto" in dashboard, questa simulazione fotografica non si rigenera automaticamente (il numero di pannelli evidenziati resta quello del valore suggerito iniziale).
 
 Entrambe derivano dal layer RGB della Google Solar API (`dataLayers.get`, endpoint `/api/roof-image`) e dalla lista pannelli di `buildingInsights` (`quote.roof.solarPanels`) già usata per il dimensionamento — nessuna nuova API da configurare, serve solo `GOOGLE_SOLAR_API_KEY` (la stessa già usata per `/api/solar` e `/api/quote`).
 
@@ -80,7 +80,8 @@ npm run dev
 - Nessun salvataggio dei preventivi generati (nessun database collegato).
 - Nessuna generazione PDF del preventivo.
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).
-- Il conteggio pannelli e l&apos;area occupata restano stime aggregate (modulo da 530 Wp, densità 0,20 kWp/m²); la simulazione fotografica del layout (vedi sopra) usa le posizioni candidate calcolate dall&apos;algoritmo di Google, non un progetto elettrico/strutturale reale del tetto.
+- Il conteggio pannelli e la superficie utile restano stime aggregate (modulo da 505 Wp, ≈4,1 m²/kWp); la simulazione fotografica del layout (vedi sopra) usa le posizioni candidate calcolate dall&apos;algoritmo di Google, non un progetto elettrico/strutturale reale del tetto.
+- La scheda con la geometria di dettaglio dei segmenti di tetto (aree, pitch, azimuth) non è più mostrata in dashboard: resta usata solo internamente per la foto satellitare e la simulazione pannelli.
 - In modalità "foto bolletta", la lettura automatica di consumo annuo e spesa annua dipende da quanto è effettivamente leggibile nella foto caricata (molte bollette non riportano un totale annuo esplicito): quando non rilevabili, questi due campi vanno inseriti a mano nella stessa schermata.
 - Il grafico combinato mensile consumi/produzione usa, in modalità "foto bolletta", un consumo distribuito in parti uguali sui 12 mesi (nessuna stagionalità): è un'approssimazione dichiarata in dashboard, non un profilo di carico reale. In modalità manuale il grafico riflette invece i valori mensili realmente inseriti.
 - La produzione annua specifica (kWh/kWp) è un dato inserito manualmente: la sua accuratezza dipende interamente dalla fonte usata dal commerciale (PVGIS, un altro tool, o una stima) al momento dell'inserimento.

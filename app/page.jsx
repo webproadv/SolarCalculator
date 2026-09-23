@@ -39,29 +39,36 @@ function pctFromTotals({ f1, f2, f3 }) {
   return { f1: pf1, f2: pf2, f3: 100 - pf1 - pf2 };
 }
 
-// Consumo diurno/notturno mese per mese, per il grafico combinato in
-// dashboard. In modalità "manuale" usa i kWh realmente inseriti in tabella;
+// Consumo diurno/notturno mese per mese per il grafico combinato in
+// dashboard — calcolato sempre a partire dai dati confermati nel preventivo
+// (quote.input), mai da una copia locale separata, in modo che la colonna
+// dei consumi rispecchi esattamente i dati inseriti nel form iniziale
+// (stessi numeri della card "Profilo di consumo" in dashboard).
+// In modalità "manuale" usa i kWh realmente inseriti nella tabella mensile;
 // in modalità "foto" (nessun dettaglio mensile disponibile dalla bolletta)
-// distribuisce il consumo annuo in parti uguali sui 12 mesi e applica ad
-// ognuno la ripartizione F1/F2/F3 media annua — una semplificazione
-// dichiarata anche in dashboard, non un profilo di carico reale.
-function computeMonthlyConsumo({ usaManuale, monthly, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, giorniLavorativi }) {
-  return MESI.map((_, i) => {
-    let f1, f2, f3;
-    if (usaManuale) {
-      f1 = Number(monthly[i].f1) || 0;
-      f2 = Number(monthly[i].f2) || 0;
-      f3 = Number(monthly[i].f3) || 0;
-    } else {
-      const totaleMese = consumoAnnuoKwh / 12;
-      f1 = totaleMese * (f1Pct / 100);
-      f2 = totaleMese * (f2Pct / 100);
-      f3 = totaleMese * (f3Pct / 100);
-    }
-    const totale = f1 + f2 + f3;
-    const { diurno, notturno } = diurnoNotturno({ f1Kwh: f1, f2Kwh: f2, f3Kwh: f3, totaleKwh: totale, giorniLavorativi });
-    return { diurno, notturno, totale: Math.round(totale) };
-  });
+// distribuisce in parti uguali sui 12 mesi i totali annui diurno/notturno
+// già calcolati dal server — una semplificazione dichiarata anche in
+// dashboard, non un profilo di carico reale.
+function monthlyConsumoFromQuote({ quoteInput, monthly, bollettaMode }) {
+  if (bollettaMode === "manuale") {
+    return MESI.map((_, i) => {
+      const f1 = Number(monthly[i]?.f1) || 0;
+      const f2 = Number(monthly[i]?.f2) || 0;
+      const f3 = Number(monthly[i]?.f3) || 0;
+      const totale = f1 + f2 + f3;
+      const { diurno, notturno } = diurnoNotturno({
+        f1Kwh: f1,
+        f2Kwh: f2,
+        f3Kwh: f3,
+        totaleKwh: totale,
+        giorniLavorativi: quoteInput.giorniLavorativi,
+      });
+      return { diurno, notturno, totale: Math.round(totale) };
+    });
+  }
+  const diurnoMese = Math.round((quoteInput.consumoDiurnoKwh || 0) / 12);
+  const notturnoMese = Math.round((quoteInput.consumoNotturnoKwh || 0) / 12);
+  return MESI.map(() => ({ diurno: diurnoMese, notturno: notturnoMese, totale: diurnoMese + notturnoMese }));
 }
 
 export default function Page() {
@@ -98,7 +105,6 @@ export default function Page() {
 
   // Step 3 — risultati
   const [quote, setQuote] = useState(null);
-  const [monthlyConsumo, setMonthlyConsumo] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState("");
 
@@ -217,7 +223,7 @@ export default function Page() {
           lng: companyData.lng,
           segments: quoteData.roof.segments,
           solarPanels: quoteData.roof.solarPanels,
-          panelsCount: Math.round(quoteData.sizing.kwpSuggerito * 1000 / 530),
+          panelsCount: Math.round((quoteData.sizing.kwpSuggerito * 1000) / DEFAULTS.panelWp),
         }),
       });
       const data = await r.json();
@@ -268,17 +274,6 @@ export default function Page() {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nel calcolo del preventivo.");
       setQuote(data);
-      setMonthlyConsumo(
-        computeMonthlyConsumo({
-          usaManuale,
-          monthly,
-          consumoAnnuoKwh: consumoEffettivo,
-          f1Pct: f1Effettivo,
-          f2Pct: f2Effettivo,
-          f3Pct: f3Effettivo,
-          giorniLavorativi: giorniEffettivi,
-        })
-      );
       setStep(2);
       // Non blocca il passaggio alla dashboard: le foto arrivano appena pronte.
       fetchRoofImagesAuto(data, company);
@@ -608,7 +603,7 @@ export default function Page() {
           roofImages={roofImages}
           roofImagesLoading={roofImagesLoading}
           roofImagesError={roofImagesError}
-          monthlyConsumo={monthlyConsumo}
+          monthly={monthly}
           bollettaMode={bollettaMode}
         />
       )}
@@ -616,10 +611,9 @@ export default function Page() {
   );
 }
 
-function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, monthlyConsumo, bollettaMode }) {
+function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, monthly, bollettaMode }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
-  const areaTot = seg.reduce((s, x) => s + x.areaMeters2, 0);
   const hasPanelsData = quote.roof.solarPanels?.length > 0;
 
   // Impianto, accumulo e costo proposti: pre-compilati con i valori
@@ -663,12 +657,12 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
   const coperturaFabbisognoPct = quote.input.consumoAnnuoKwh
     ? Math.round((produzioneAnnuaTotaleKwh / quote.input.consumoAnnuoKwh) * 1000) / 10
     : 0;
-  const pannelliStimati = Math.round((kwp * 1000) / 530);
-  const areaOccupataStimataM2 = Math.round(kwp / DEFAULTS.kwpPerM2);
-  const limitatoDalTetto = quote.sizing.maxKwpTetto > 0 && kwp > quote.sizing.maxKwpTetto;
+  const pannelliStimati = Math.round((kwp * 1000) / DEFAULTS.panelWp);
+  const areaUtileStimataM2 = Math.round(kwp * DEFAULTS.mqPerKwp);
 
-  const monthlyDiurno = (monthlyConsumo || []).map((m) => m.diurno);
-  const monthlyNotturno = (monthlyConsumo || []).map((m) => m.notturno);
+  const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, bollettaMode });
+  const monthlyDiurno = monthlyConsumo.map((m) => m.diurno);
+  const monthlyNotturno = monthlyConsumo.map((m) => m.notturno);
 
   return (
     <div className="wrap">
@@ -754,39 +748,9 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
         </div>
 
         <div className="card" style={{ marginTop: 20 }}>
-          <h3>Segmenti di tetto individuati</h3>
-          <div className="card-note">{quote.roof.imageryQuality || "N/D"} quality · rilievo {quote.roof.imageryDate || "n/d"}</div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Segmento</th><th className="num">Area</th><th className="num">Pitch reale</th><th className="num">Azimuth</th></tr></thead>
-              <tbody>
-                {seg.map((s, i) => (
-                  <tr key={i}>
-                    <td><span className="seg-swatch" style={{ background: segColors[i % 3] }} />{s.nome}</td>
-                    <td className="num">{s.areaMeters2.toFixed(0)} m²</td>
-                    <td className="num">{s.pitchDegrees.toFixed(1)}°</td>
-                    <td className="num">{s.azimuthDegrees.toFixed(0)}°</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="hint" style={{ marginTop: 10 }}>
-            Geometria del tetto da Google Solar API, usata per l&apos;area disponibile qui sotto e per la foto satellitare in alto; la produzione dell&apos;impianto (a sinistra) si basa sulla produzione specifica che hai inserito, non su questi dati di pendenza/orientamento.
-          </p>
-          <div style={{ marginTop: 14, display: "flex", gap: 20 }}>
-            <StatMini v={`${quote.roof.maxArrayPanelsCount ?? "—"}`} l="Pannelli max installabili (tetto)" />
-            <StatMini v={`${quote.sizing.maxKwpTetto ? quote.sizing.maxKwpTetto.toLocaleString("it-IT") : "—"} kWp`} l="Potenza max installabile (tetto)" />
-          </div>
-          {limitatoDalTetto && (
-            <span className="pill warn" style={{ marginTop: 10 }}>l&apos;impianto proposto supera la capacità stimata del tetto</span>
-          )}
-        </div>
-
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Foto satellitare e simulazione pannelli</h3>
+          <h3>Simulazione pannelli sul tetto</h3>
           <div className="card-note">
-            Foto aerea del sito e simulazione dell&apos;impianto proposto sul tetto, generate automaticamente dal layer RGB della Google Solar API.
+            Impianto proposto sovrapposto alla foto aerea del sito (già mostrata in alto), generato automaticamente dal layer RGB della Google Solar API.
           </div>
 
           {!hasPanelsData ? (
@@ -798,16 +762,10 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
           ) : roofImagesLoading ? (
             <p className="hint" style={{ marginTop: 10 }}><span className="spinner" style={{ marginRight: 8 }} />Generazione foto in corso…</p>
           ) : roofImages ? (
-            <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ flex: "1 1 280px" }}>
-                <img src={roofImages.satelliteImageUrl} alt="Foto aerea del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-                <div className="card-note" style={{ marginTop: 6 }}>Foto aerea · rilievo {roofImages.imageryDate || "n/d"}</div>
-              </div>
-              <div style={{ flex: "1 1 280px" }}>
-                <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-                <div className="card-note" style={{ marginTop: 6 }}>
-                  Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
-                </div>
+            <div style={{ marginTop: 14, maxWidth: 480 }}>
+              <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+              <div className="card-note" style={{ marginTop: 6 }}>
+                Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
               </div>
             </div>
           ) : null}
@@ -820,25 +778,27 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
         <div className="grid-3">
           <div className="card">
             <h3>Impianto proposto</h3>
-            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+            <div className="suggested-box">
+              <div className="v">{quote.sizing.kwpSuggerito} kWp</div>
+              <div className="l">Impianto suggerito (consumo totale ÷ produzione annua FV)</div>
+            </div>
+            <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
               <label>Impianto proposto (kWp)</label>
               <input type="number" min="0" step="0.1" value={impiantoProposto} onChange={(e) => setImpiantoProposto(e.target.value)} />
-              <p className="hint">Suggerito: {quote.sizing.kwpSuggerito} kWp (consumo totale ÷ produzione annua FV)</p>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <StatMini v={`≈ ${pannelliStimati}`} l="Pannelli (moduli da 530 Wp)" />
-              <StatMini v={`${areaOccupataStimataM2} m²`} l={`Area occupata su ${areaTot.toFixed(0)} m² rilevati`} />
             </div>
           </div>
           <div className="card">
             <h3>Accumulo proposto</h3>
-            <div className="field" style={{ marginTop: 10, marginBottom: 10 }}>
+            <div className="suggested-box">
+              <div className="v">{quote.sizing.accumuloSuggeritoKwh} kWh</div>
+              <div className="l">Accumulo suggerito (consumo notturno ÷ 365)</div>
+            </div>
+            <div className="field" style={{ marginTop: 10, marginBottom: 0 }}>
               <label>Accumulo proposto (kWh)</label>
               <input type="number" min="0" step="1" value={accumuloProposto} onChange={(e) => setAccumuloProposto(e.target.value)} />
-              <p className="hint">Suggerito: {quote.sizing.accumuloSuggeritoKwh} kWh (consumo notturno ÷ 365)</p>
             </div>
             {!hasBattery && (
-              <p style={{ fontSize: 13.5, color: "var(--ink-soft)" }}>Nessun accumulo previsto con il valore attuale.</p>
+              <p className="hint" style={{ marginTop: 10 }}>Nessun accumulo previsto con il valore attuale.</p>
             )}
           </div>
           <div className="card">
@@ -854,6 +814,16 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
                 <div className="econ-fill" style={{ width: `${Math.min(100, coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Dati tecnici dell&apos;impianto proposto</h3>
+          <div className="card-note">Stime basate su moduli standard e superficie utile media per kWp installato</div>
+          <div className="grid-3" style={{ marginTop: 4 }}>
+            <StatMini v={`≈ ${pannelliStimati}`} l="Pannelli da installare (moduli da 505 Wp)" />
+            <StatMini v={`≈ ${areaUtileStimataM2} m²`} l="Superficie utile richiesta (≈4,1 m²/kWp)" />
+            <StatMini v={`${autoconsumoPct}%`} l="Percentuale di autoconsumo stimata" />
           </div>
         </div>
       </section>
@@ -899,17 +869,15 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
           <div className="card"><StatMini v={`${co2} t`} l="CO₂ evitata stimata / anno" /></div>
         </div>
 
-        {monthlyConsumo && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3>Consumi (diurno/notturno) e produzione impianto — mese per mese</h3>
-            <div className="card-note">
-              {bollettaMode === "manuale"
-                ? "Consumi dalla tabella mensile inserita; produzione dal profilo mensile tipico applicato all'impianto proposto."
-                : "Consumo annuo distribuito in parti uguali sui 12 mesi (nessun dettaglio mensile disponibile dalla bolletta); produzione dal profilo mensile tipico applicato all'impianto proposto."}
-            </div>
-            <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Consumi (diurno/notturno) e produzione impianto — mese per mese</h3>
+          <div className="card-note">
+            {bollettaMode === "manuale"
+              ? "Consumi dalla tabella mensile inserita nello step Consumi (stessi dati della card “Profilo di consumo” qui sopra); produzione dal profilo mensile tipico applicato all'impianto proposto."
+              : "Consumo diurno/notturno annuo confermato nel preventivo (card “Profilo di consumo” qui sopra), distribuito in parti uguali sui 12 mesi — nessun dettaglio mensile disponibile dalla bolletta; produzione dal profilo mensile tipico applicato all'impianto proposto."}
           </div>
-        )}
+          <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
+        </div>
       </section>
 
       <section className="block" id="d">
