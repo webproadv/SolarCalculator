@@ -810,6 +810,11 @@ function Dashboard({
 
   return (
     <div className="wrap">
+      <div className="print-header">
+        <div className="print-header-title">Preventivo impianto fotovoltaico — {company.ragioneSociale}</div>
+        <div className="print-header-meta">Lenergy Spa — Business Energy Advisor · Generato il {new Date().toLocaleDateString("it-IT")}</div>
+      </div>
+
       {(quote.demo || company?.demo) && (
         <div className="demo-banner" style={{ margin: "0 -24px 24px" }}>
           DATI DI ESEMPIO — alcune sorgenti non sono configurate su questa istanza (vedi README)
@@ -827,6 +832,8 @@ function Dashboard({
           {saveState.status === "loading" && <span className="spinner" />}
           💾 Salva progetto
         </button>
+        <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
+        <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
       </div>
@@ -1067,14 +1074,10 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. Le percentuali di autoconsumo sono stime da curve statistiche di settore, non da un profilo di carico orario reale. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
       </div>
     </div>
   );
