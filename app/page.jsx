@@ -773,6 +773,12 @@ function Dashboard({
         </div>
       )}
 
+      {quote.roofDataUnavailable && (
+        <div className="demo-banner" style={{ margin: "0 -24px 24px" }}>
+          ⚠️ Google non dispone di un rilievo satellitare dettagliato per questo indirizzo: il dimensionamento qui sotto è basato solo sui consumi dichiarati (nessun vincolo di superficie tetto). Foto satellitare e superficie massima non disponibili — puoi comunque procedere e modificare a mano i campi proposti.
+        </div>
+      )}
+
       <div className="save-bar">
         <button className="btn btn-primary" onClick={salvaProgetto} disabled={saveState.status === "loading"}>
           {saveState.status === "loading" && <span className="spinner" />}

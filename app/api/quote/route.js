@@ -78,6 +78,7 @@ export async function POST(req) {
 
     return NextResponse.json({
       demo: roof.demo === true,
+      roofDataUnavailable: roof.noRoofData === true,
       input: {
         lat,
         lng,
