@@ -30,7 +30,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-        max_tokens: 400,
+        max_tokens: 600,
         messages: [
           {
             role: "user",
@@ -39,14 +39,17 @@ export async function POST(req) {
               {
                 type: "text",
                 text:
-                  "Questa è una foto di una bolletta elettrica italiana (o del suo grafico dei consumi in fascia oraria F1/F2/F3). " +
+                  "Questa è una foto di una bolletta elettrica italiana (o dei suoi grafici dei consumi). " +
                   "Estrai quello che riesci a leggere con sicurezza:\n" +
                   "1. Le percentuali di consumo per fascia F1/F2/F3 (dal grafico a torta/barre, se presente).\n" +
                   "2. Il consumo totale annuo in kWh, se indicato in bolletta (es. 'consumo annuo', 'kWh fatturati nei 12 mesi', totale di un riepilogo annuale).\n" +
                   "3. La spesa/importo totale annuo in € (se la bolletta riporta un totale su base annua; se riporta solo un importo periodico, es. mensile o bimestrale, NON estrapolare tu il totale annuo: lascia il campo a null).\n" +
+                  "4. Se è presente un grafico/tabella dell'andamento dei consumi mese per mese (o bimestre per bimestre, tipicamente intitolato 'andamento dei consumi' o simile, con gli ultimi 12 mesi), leggi i kWh di ciascuno dei 12 mesi, in ordine da gennaio a dicembre. Se un valore è bimestrale, dividilo a metà tra i due mesi corrispondenti. Se questo grafico non è presente nella foto o non riesci a leggerlo con sufficiente certezza per anche un solo mese, usa un array di 12 null (non stimare o inventare valori).\n" +
                   "Rispondi SOLO con un JSON valido nel formato " +
                   '{"f1_pct": <numero 0-100 o null>, "f2_pct": <numero 0-100 o null>, "f3_pct": <numero 0-100 o null>, ' +
-                  '"consumo_annuo_kwh": <numero o null>, "spesa_annua_euro": <numero o null>, "confidence": "alta|media|bassa"}. ' +
+                  '"consumo_annuo_kwh": <numero o null>, "spesa_annua_euro": <numero o null>, ' +
+                  '"monthly_kwh": [<gennaio>, <febbraio>, ..., <dicembre>] (12 numeri, o 12 null se il grafico mensile non è leggibile), ' +
+                  '"confidence": "alta|media|bassa"}. ' +
                   "Se leggi le tre percentuali, devono sommare a 100. Usa null per ogni valore che non riesci a leggere con sufficiente certezza dalla foto (non stimare o inventare numeri). " +
                   "Se non riesci a leggere nulla con sufficiente certezza, usa confidence: \"bassa\".",
               },

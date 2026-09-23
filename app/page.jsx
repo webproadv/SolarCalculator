@@ -41,17 +41,36 @@ function pctFromTotals({ f1, f2, f3 }) {
   return { f1: pf1, f2: pf2, f3: 100 - pf1 - pf2 };
 }
 
+// Forma stagionale generica per un profilo di consumo commerciale/industriale
+// italiano (pesi relativi mese per mese: non serve che sommino a un valore
+// preciso, vengono sempre rinormalizzati sul totale annuo reale prima
+// dell'uso). Riflette il tipico calo di agosto per le ferie e punte leggere
+// nei mesi invernali/estivi (riscaldamento/climatizzazione). Usata SOLO come
+// ultima risorsa, quando non sono disponibili né i consumi mensili reali
+// (tabella "manuale") né un andamento letto dalla bolletta (OCR) — è una
+// stima dichiarata come tale, mai un valore identico su tutti i mesi.
+const CONSUMO_MONTHLY_SHAPE_FALLBACK = [1.06, 1.02, 1.0, 0.94, 0.94, 1.0, 1.04, 0.55, 0.96, 1.0, 1.06, 1.08];
+
+// Distribuisce un totale annuo sui 12 mesi secondo una "forma" di pesi
+// relativi, rinormalizzata così che la somma dei 12 valori risultanti torni
+// sempre esattamente al totale annuo passato.
+function applyMonthlyShape(totaleAnnuo, pesi) {
+  const sommaPesi = pesi.reduce((s, p) => s + p, 0) || 1;
+  return pesi.map((p) => (totaleAnnuo * p) / sommaPesi);
+}
+
 // Consumo diurno/notturno mese per mese per il grafico combinato in
-// dashboard — calcolato sempre a partire dai dati confermati nel preventivo
-// (quote.input), mai da una copia locale separata, in modo che la colonna
-// dei consumi rispecchi esattamente i dati inseriti nel form iniziale
-// (stessi numeri della card "Profilo di consumo" in dashboard).
-// In modalità "manuale" usa i kWh realmente inseriti nella tabella mensile;
-// in modalità "foto" (nessun dettaglio mensile disponibile dalla bolletta)
-// distribuisce in parti uguali sui 12 mesi i totali annui diurno/notturno
-// già calcolati dal server — una semplificazione dichiarata anche in
-// dashboard, non un profilo di carico reale.
-function monthlyConsumoFromQuote({ quoteInput, monthly, bollettaMode }) {
+// dashboard — calcolato sempre a partire dai totali confermati nel
+// preventivo (quote.input), mai da una copia locale separata, in modo che la
+// colonna dei consumi rispecchi esattamente i dati inseriti nel form
+// iniziale (stessi numeri della card "Profilo di consumo" in dashboard).
+// In modalità "manuale" usa i kWh realmente inseriti nella tabella mensile.
+// In modalità "foto": se la bolletta caricata conteneva un grafico
+// dell'andamento dei consumi mese per mese ed è stato letto con successo
+// (vedi /api/ocr-bolletta), lo usiamo come "forma" reale mese per mese;
+// altrimenti applichiamo la stagionalità tipica di CONSUMO_MONTHLY_SHAPE_FALLBACK
+// — mai una semplice divisione per 12 uguale su tutti i mesi.
+function monthlyConsumoFromQuote({ quoteInput, monthly, bollettaMode, ocrMonthlyKwh }) {
   if (bollettaMode === "manuale") {
     return MESI.map((_, i) => {
       const f1 = Number(monthly[i]?.f1) || 0;
@@ -68,9 +87,20 @@ function monthlyConsumoFromQuote({ quoteInput, monthly, bollettaMode }) {
       return { diurno, notturno, totale: Math.round(totale) };
     });
   }
-  const diurnoMese = Math.round((quoteInput.consumoDiurnoKwh || 0) / 12);
-  const notturnoMese = Math.round((quoteInput.consumoNotturnoKwh || 0) / 12);
-  return MESI.map(() => ({ diurno: diurnoMese, notturno: notturnoMese, totale: diurnoMese + notturnoMese }));
+
+  const pesi =
+    Array.isArray(ocrMonthlyKwh) && ocrMonthlyKwh.length === 12 && ocrMonthlyKwh.every((v) => typeof v === "number" && v >= 0)
+      ? ocrMonthlyKwh
+      : CONSUMO_MONTHLY_SHAPE_FALLBACK;
+
+  const diurnoMensile = applyMonthlyShape(quoteInput.consumoDiurnoKwh || 0, pesi);
+  const notturnoMensile = applyMonthlyShape(quoteInput.consumoNotturnoKwh || 0, pesi);
+
+  return MESI.map((_, i) => {
+    const diurno = Math.round(diurnoMensile[i]);
+    const notturno = Math.round(notturnoMensile[i]);
+    return { diurno, notturno, totale: diurno + notturno };
+  });
 }
 
 export default function Page() {
@@ -88,6 +118,10 @@ export default function Page() {
   const [f3Pct, setF3Pct] = useState(20);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrNote, setOcrNote] = useState("");
+  // Andamento mensile dei consumi (12 kWh, gennaio→dicembre) se leggibile dal
+  // grafico "andamento consumi" della bolletta caricata; null se non presente
+  // o non letto con sufficiente certezza — vedi monthlyConsumoFromQuote.
+  const [ocrMonthlyKwh, setOcrMonthlyKwh] = useState(null);
   const [preview, setPreview] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -134,6 +168,7 @@ export default function Page() {
       if (saved.quote) setQuote(saved.quote);
       if (saved.monthly) setMonthly(saved.monthly);
       if (saved.bollettaMode) setBollettaMode(saved.bollettaMode);
+      if (saved.ocrMonthlyKwh) setOcrMonthlyKwh(saved.ocrMonthlyKwh);
       setProgettoCaricato({
         id: data.id,
         impiantoProposto: saved.impiantoProposto,
@@ -208,6 +243,7 @@ export default function Page() {
     setPreview(URL.createObjectURL(file));
     setOcrLoading(true);
     setOcrNote("");
+    setOcrMonthlyKwh(null);
     try {
       const fd = new FormData();
       fd.append("bolletta", file);
@@ -234,6 +270,10 @@ export default function Page() {
         if (typeof data.spesa_annua_euro === "number") {
           setSpesaAnnua((prev) => (prev ? prev : String(Math.round(data.spesa_annua_euro))));
           letti.push("spesa annua");
+        }
+        if (Array.isArray(data.monthly_kwh) && data.monthly_kwh.length === 12 && data.monthly_kwh.every((v) => typeof v === "number" && v >= 0)) {
+          setOcrMonthlyKwh(data.monthly_kwh);
+          letti.push("andamento mensile");
         }
         setOcrNote(
           letti.length
@@ -665,6 +705,7 @@ export default function Page() {
           roofImagesError={roofImagesError}
           monthly={monthly}
           bollettaMode={bollettaMode}
+          ocrMonthlyKwh={ocrMonthlyKwh}
           initialImpiantoProposto={progettoCaricato?.impiantoProposto}
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
           initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
@@ -683,6 +724,7 @@ function Dashboard({
   roofImagesError,
   monthly,
   bollettaMode,
+  ocrMonthlyKwh,
   initialImpiantoProposto,
   initialAccumuloProposto,
   initialCostoImpiantoProposto,
@@ -714,7 +756,7 @@ function Dashboard({
       const r = await fetch("/api/progetti", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ company, quote, monthly, bollettaMode, impiantoProposto, accumuloProposto, costoImpiantoProposto }),
+        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
@@ -761,7 +803,7 @@ function Dashboard({
   const pannelliStimati = Math.round((kwp * 1000) / DEFAULTS.panelWp);
   const areaUtileStimataM2 = Math.round(kwp * DEFAULTS.mqPerKwp);
 
-  const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, bollettaMode });
+  const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, bollettaMode, ocrMonthlyKwh });
   const monthlyDiurno = monthlyConsumo.map((m) => m.diurno);
   const monthlyNotturno = monthlyConsumo.map((m) => m.notturno);
 
