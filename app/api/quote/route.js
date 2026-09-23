@@ -1,134 +1,119 @@
 import { NextResponse } from "next/server";
-import { fetchRoof, fetchPvgisDetailed } from "../../../lib/sources";
+import { fetchRoof } from "../../../lib/sources";
 import {
   DEFAULTS,
-  sizeSystem,
-  sizeBattery,
-  estimateSelfConsumption,
-  energyBalance,
-  economics,
+  diurnoNotturno,
+  sizeSystemFromProduzione,
+  sizeBatteryFromNotturno,
   investmentEstimate,
-  paybackYears,
-  co2Evitata,
 } from "../../../lib/calc";
 
-// Orchestratore principale: dato un sito (lat/lng) e i consumi dichiarati,
-// recupera geometria tetto (Solar API) + producibilità (PVGIS), dimensiona
-// impianto e accumulo, e calcola il bilancio energetico-economico completo.
+// Orchestratore principale: dato un sito (lat/lng), i consumi dichiarati (con
+// ripartizione F1/F2/F3) e la produzione annua specifica del sito — inserita
+// manualmente dall'utente nella schermata "Consumi" (tipicamente da PVGIS o
+// da una stima già in suo possesso: questa route NON chiama più PVGIS) —
+// calcola:
+// - il fabbisogno diurno/notturno, in base ai giorni lavorativi dichiarati;
+// - la taglia di impianto e accumulo suggerita (di partenza: resta poi
+//   modificabile a mano in dashboard, insieme al costo dell'impianto);
+// - la geometria del tetto (Google Solar API), usata come riferimento per
+//   l'area massima disponibile e per generare la foto satellitare.
 //
 // body atteso:
 // {
 //   lat, lng,
 //   spesaAnnua, consumoAnnuoKwh,
 //   f1Pct, f2Pct, f3Pct,          // ripartizione consumi, sommano a 100
-//   coperturaTarget?,             // default 0.9
+//   produzioneAnnuaFvKwh,         // kWh/kWp/anno — inserito manualmente dall'utente
+//   giorniLavorativi,             // 5, 6 o 7 — usato per il calcolo diurno/notturno
 //   tariffaGSE?, tariffaCER?      // default vedi lib/calc.js DEFAULTS
 // }
 export async function POST(req) {
   const body = await req.json();
-  const { lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct } = body;
+  const { lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi } = body;
 
-  if ([lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct].some((v) => typeof v !== "number")) {
+  if (
+    [lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi].some(
+      (v) => typeof v !== "number"
+    )
+  ) {
     return NextResponse.json(
-      { error: "Parametri mancanti: servono lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct." },
+      {
+        error:
+          "Parametri mancanti: servono lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi.",
+      },
       { status: 400 }
     );
   }
 
   try {
     const roof = await fetchRoof(lat, lng);
-    const { specificYields, monthlyShapes } = await fetchPvgisDetailed(lat, lng, roof.segments);
-
     const areaTotale = roof.segments.reduce((s, seg) => s + seg.areaMeters2, 0);
-    const producibilitaSpecificaMedia =
-      roof.segments.reduce((s, seg, i) => s + seg.areaMeters2 * specificYields[i], 0) / areaTotale;
-
     const maxKwpTetto = roof.maxArrayAreaMeters2
       ? roof.maxArrayAreaMeters2 * DEFAULTS.kwpPerM2
       : areaTotale * DEFAULTS.kwpPerM2;
 
-    const coperturaTarget = body.coperturaTarget ?? DEFAULTS.coperturaTarget;
-    const { kwp, limitatoDalTetto } = sizeSystem({
-      consumoAnnuoKwh,
-      producibilitaSpecifica: producibilitaSpecificaMedia,
-      maxKwpTetto,
-      coperturaTarget,
+    // Consumi per fascia in kWh assoluti (non solo percentuali), evidenziati
+    // poi in dashboard: l'ultima fascia assorbe l'arrotondamento per tornare
+    // esattamente al totale dichiarato.
+    const f1Kwh = Math.round((consumoAnnuoKwh * f1Pct) / 100);
+    const f2Kwh = Math.round((consumoAnnuoKwh * f2Pct) / 100);
+    const f3Kwh = Math.round(consumoAnnuoKwh - f1Kwh - f2Kwh);
+
+    const { diurno: consumoDiurnoKwh, notturno: consumoNotturnoKwh } = diurnoNotturno({
+      f1Kwh,
+      f2Kwh,
+      f3Kwh,
+      totaleKwh: consumoAnnuoKwh,
+      giorniLavorativi,
     });
 
-    const quotaF2F3 = (f2Pct + f3Pct) / 100;
-    const hasBattery = quotaF2F3 >= 0.3;
-    const battery = hasBattery ? sizeBattery({ kwp, quotaF2F3 }) : { kwh: 0, rapporto: 0 };
+    const kwpSuggerito = sizeSystemFromProduzione({ consumoAnnuoKwh, produzioneAnnuaFvKwh });
+    const accumuloSuggeritoKwh = sizeBatteryFromNotturno({ consumoNotturnoKwh });
+    const limitatoDalTetto = maxKwpTetto > 0 && kwpSuggerito > maxKwpTetto;
+    const investimentoSuggerito = investmentEstimate({ kwp: kwpSuggerito, batteriaKwh: accumuloSuggeritoKwh });
 
-    const producibilitaAnnuaKwh = kwp * producibilitaSpecificaMedia;
-
-    const autoconsumoPct = estimateSelfConsumption({
-      hasBattery,
-      kwp,
-      consumoAnnuoKwh,
-      producibilitaAnnuaKwh,
-    });
-    const balance = energyBalance({ producibilitaAnnuaKwh, autoconsumoPct });
-
-    const tariffaGSE = body.tariffaGSE ?? DEFAULTS.tariffaGSE;
-    const tariffaCER = body.tariffaCER ?? DEFAULTS.tariffaCER;
-    const econ = economics({
-      spesaAnnua,
-      consumoAnnuoKwh,
-      energiaAutoconsumata: balance.autoconsumata,
-      energiaImmessa: balance.immessa,
-      tariffaGSE,
-      tariffaCER,
-    });
-
-    const investimento = investmentEstimate({ kwp, batteriaKwh: battery.kwh });
-    const payback = paybackYears({ investimento, beneficioAnnuo: econ.beneficioTotale });
-    const co2 = co2Evitata({
-      producibilitaAnnuaKwh,
-      carbonOffsetFactorKgPerMwh: roof.carbonOffsetFactorKgPerMwh ?? 350,
-    });
-
-    // Produzione mensile: pesiamo la forma mensile di ciascun segmento per la
-    // quota di kWp che gli assegniamo (proporzionale all'area, come per la
-    // producibilità specifica media).
-    const monthlyProduction = Array.from({ length: 12 }, (_, m) =>
-      roof.segments.reduce((sum, seg, i) => {
-        const kwpSegmento = kwp * (seg.areaMeters2 / areaTotale);
-        return sum + kwpSegmento * specificYields[i] * monthlyShapes[i][m];
-      }, 0)
-    );
+    const tariffaGSE = typeof body.tariffaGSE === "number" ? body.tariffaGSE : DEFAULTS.tariffaGSE;
+    const tariffaCER = typeof body.tariffaCER === "number" ? body.tariffaCER : DEFAULTS.tariffaCER;
 
     return NextResponse.json({
       demo: roof.demo === true,
-      input: { lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, coperturaTarget, tariffaGSE, tariffaCER },
+      input: {
+        lat,
+        lng,
+        spesaAnnua,
+        consumoAnnuoKwh,
+        f1Pct,
+        f2Pct,
+        f3Pct,
+        f1Kwh,
+        f2Kwh,
+        f3Kwh,
+        consumoDiurnoKwh,
+        consumoNotturnoKwh,
+        giorniLavorativi,
+        produzioneAnnuaFvKwh,
+        tariffaGSE,
+        tariffaCER,
+      },
       roof: {
         imageryDate: roof.imageryDate,
         imageryQuality: roof.imageryQuality,
         maxArrayPanelsCount: roof.maxArrayPanelsCount,
         maxArrayAreaMeters2: roof.maxArrayAreaMeters2,
         carbonOffsetFactorKgPerMwh: roof.carbonOffsetFactorKgPerMwh,
-        segments: roof.segments.map((seg, i) => ({ ...seg, producibilitaSpecifica: Math.round(specificYields[i]) })),
-        // Passati al frontend solo per l'eventuale generazione su richiesta
-        // della foto con simulazione pannelli (vedi /api/roof-image).
+        segments: roof.segments,
+        // Passati al frontend solo per la generazione automatica della foto
+        // con simulazione pannelli (vedi /api/roof-image).
         solarPanels: roof.solarPanels || [],
       },
       sizing: {
-        kwp,
+        kwpSuggerito,
+        accumuloSuggeritoKwh,
+        maxKwpTetto: Math.round(maxKwpTetto),
         limitatoDalTetto,
-        areaOccupataStimataM2: Math.round(kwp / DEFAULTS.kwpPerM2),
-        pannelliStimati: Math.round((kwp * 1000) / 530),
-        batteriaKwh: battery.kwh,
-        batteriaRapporto: battery.rapporto,
-        hasBattery,
+        investimentoSuggerito,
       },
-      production: {
-        annuaKwh: Math.round(producibilitaAnnuaKwh),
-        coperturaFabbisognoPct: Math.round((producibilitaAnnuaKwh / consumoAnnuoKwh) * 1000) / 10,
-        monthlyKwh: monthlyProduction.map((v) => Math.round(v)),
-      },
-      balance: { autoconsumoPct: Math.round(autoconsumoPct * 1000) / 10, ...balance },
-      economics: econ,
-      investment: { stimaEuro: investimento, paybackYears: payback },
-      co2EvitataTonnellate: co2,
     });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 502 });

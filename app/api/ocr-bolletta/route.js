@@ -30,7 +30,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001",
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [
           {
             role: "user",
@@ -39,10 +39,16 @@ export async function POST(req) {
               {
                 type: "text",
                 text:
-                  "Questa è una foto del grafico dei consumi in fascia oraria (F1/F2/F3) di una bolletta elettrica italiana. " +
-                  "Leggi i valori (percentuali o kWh) per F1, F2 e F3. Rispondi SOLO con un JSON valido nel formato " +
-                  '{"f1_pct": <numero 0-100>, "f2_pct": <numero 0-100>, "f3_pct": <numero 0-100>, "confidence": "alta|media|bassa"}. ' +
-                  "Le tre percentuali devono sommare a 100. Se non riesci a leggere il grafico con sufficiente certezza, usa confidence: \"bassa\".",
+                  "Questa è una foto di una bolletta elettrica italiana (o del suo grafico dei consumi in fascia oraria F1/F2/F3). " +
+                  "Estrai quello che riesci a leggere con sicurezza:\n" +
+                  "1. Le percentuali di consumo per fascia F1/F2/F3 (dal grafico a torta/barre, se presente).\n" +
+                  "2. Il consumo totale annuo in kWh, se indicato in bolletta (es. 'consumo annuo', 'kWh fatturati nei 12 mesi', totale di un riepilogo annuale).\n" +
+                  "3. La spesa/importo totale annuo in € (se la bolletta riporta un totale su base annua; se riporta solo un importo periodico, es. mensile o bimestrale, NON estrapolare tu il totale annuo: lascia il campo a null).\n" +
+                  "Rispondi SOLO con un JSON valido nel formato " +
+                  '{"f1_pct": <numero 0-100 o null>, "f2_pct": <numero 0-100 o null>, "f3_pct": <numero 0-100 o null>, ' +
+                  '"consumo_annuo_kwh": <numero o null>, "spesa_annua_euro": <numero o null>, "confidence": "alta|media|bassa"}. ' +
+                  "Se leggi le tre percentuali, devono sommare a 100. Usa null per ogni valore che non riesci a leggere con sufficiente certezza dalla foto (non stimare o inventare numeri). " +
+                  "Se non riesci a leggere nulla con sufficiente certezza, usa confidence: \"bassa\".",
               },
             ],
           },
