@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { UserButton } from "@clerk/nextjs";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -113,6 +115,46 @@ export default function Page() {
   const [roofImages, setRoofImages] = useState(null);
   const [roofImagesLoading, setRoofImagesLoading] = useState(false);
   const [roofImagesError, setRoofImagesError] = useState("");
+
+  // Progetto salvato aperto da "I miei progetti" (/?progetto=<id>): tiene i
+  // valori proposto impianto/accumulo/costo con cui era stato salvato, così
+  // la Dashboard li ripristina invece di ripartire dai valori suggeriti.
+  const [progettoCaricato, setProgettoCaricato] = useState(null);
+  const [progettoCaricamento, setProgettoCaricamento] = useState(false);
+
+  async function caricaProgettoDaId(id) {
+    setProgettoCaricamento(true);
+    setQuoteError("");
+    try {
+      const r = await fetch(`/api/progetti/${id}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nel caricamento del progetto salvato.");
+      const saved = data.dati || {};
+      if (saved.company) setCompany(saved.company);
+      if (saved.quote) setQuote(saved.quote);
+      if (saved.monthly) setMonthly(saved.monthly);
+      if (saved.bollettaMode) setBollettaMode(saved.bollettaMode);
+      setProgettoCaricato({
+        id: data.id,
+        impiantoProposto: saved.impiantoProposto,
+        accumuloProposto: saved.accumuloProposto,
+        costoImpiantoProposto: saved.costoImpiantoProposto,
+      });
+      setStep(2);
+    } catch (err) {
+      setQuoteError(err.message);
+    } finally {
+      setProgettoCaricamento(false);
+    }
+  }
+
+  // Apertura diretta di un progetto salvato tramite /?progetto=<id> (link
+  // "Apri" nella pagina "I miei progetti").
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("progetto");
+    if (id) caricaProgettoDaId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function cercaAzienda(e) {
     e.preventDefault();
@@ -311,10 +353,25 @@ export default function Page() {
               <small>SolarCalculator — MVP</small>
             </div>
           </div>
+          <div className="topnav-actions">
+            <Link href="/progetti" className="btn btn-ghost">
+              📂 I miei progetti
+            </Link>
+            <UserButton afterSignOutUrl="/sign-in" />
+          </div>
         </div>
       </div>
 
-      {step < 2 ? (
+      {progettoCaricamento ? (
+        <div className="wizard">
+          <div className="card">
+            <p className="hint">
+              <span className="spinner" style={{ marginRight: 8 }} />
+              Caricamento del progetto salvato…
+            </p>
+          </div>
+        </div>
+      ) : step < 2 ? (
         <div className="wizard">
           <div className="steps">
             {STEPS.slice(0, 2).map((s, i) => (
@@ -599,19 +656,37 @@ export default function Page() {
         <Dashboard
           company={company}
           quote={quote}
-          onRestart={() => setStep(0)}
+          onRestart={() => {
+            setStep(0);
+            setProgettoCaricato(null);
+          }}
           roofImages={roofImages}
           roofImagesLoading={roofImagesLoading}
           roofImagesError={roofImagesError}
           monthly={monthly}
           bollettaMode={bollettaMode}
+          initialImpiantoProposto={progettoCaricato?.impiantoProposto}
+          initialAccumuloProposto={progettoCaricato?.accumuloProposto}
+          initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
         />
       )}
     </>
   );
 }
 
-function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, roofImagesError, monthly, bollettaMode }) {
+function Dashboard({
+  company,
+  quote,
+  onRestart,
+  roofImages,
+  roofImagesLoading,
+  roofImagesError,
+  monthly,
+  bollettaMode,
+  initialImpiantoProposto,
+  initialAccumuloProposto,
+  initialCostoImpiantoProposto,
+}) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
   const hasPanelsData = quote.roof.solarPanels?.length > 0;
@@ -619,9 +694,35 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
   // Impianto, accumulo e costo proposti: pre-compilati con i valori
   // suggeriti dal calcolo, ma sempre modificabili — dal loro valore
   // dipendono produzione, autoconsumo, benefici e payback qui sotto.
-  const [impiantoProposto, setImpiantoProposto] = useState(String(quote.sizing.kwpSuggerito || ""));
-  const [accumuloProposto, setAccumuloProposto] = useState(String(quote.sizing.accumuloSuggeritoKwh || 0));
-  const [costoImpiantoProposto, setCostoImpiantoProposto] = useState(String(quote.sizing.investimentoSuggerito || ""));
+  const [impiantoProposto, setImpiantoProposto] = useState(
+    String(initialImpiantoProposto ?? quote.sizing.kwpSuggerito ?? "")
+  );
+  const [accumuloProposto, setAccumuloProposto] = useState(
+    String(initialAccumuloProposto ?? quote.sizing.accumuloSuggeritoKwh ?? 0)
+  );
+  const [costoImpiantoProposto, setCostoImpiantoProposto] = useState(
+    String(initialCostoImpiantoProposto ?? quote.sizing.investimentoSuggerito ?? "")
+  );
+
+  // Salvataggio su Supabase (tabella `progetti`): ogni salvataggio crea un
+  // nuovo snapshot con i valori attuali di impianto/accumulo/costo proposti.
+  const [saveState, setSaveState] = useState({ status: "idle", message: "" });
+
+  async function salvaProgetto() {
+    setSaveState({ status: "loading", message: "" });
+    try {
+      const r = await fetch("/api/progetti", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ company, quote, monthly, bollettaMode, impiantoProposto, accumuloProposto, costoImpiantoProposto }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
+      setSaveState({ status: "done", message: "Progetto salvato." });
+    } catch (err) {
+      setSaveState({ status: "error", message: err.message });
+    }
+  }
 
   const kwp = Number(impiantoProposto) || 0;
   const batteriaKwh = Number(accumuloProposto) || 0;
@@ -671,6 +772,15 @@ function Dashboard({ company, quote, onRestart, roofImages, roofImagesLoading, r
           DATI DI ESEMPIO — alcune sorgenti non sono configurate su questa istanza (vedi README)
         </div>
       )}
+
+      <div className="save-bar">
+        <button className="btn btn-primary" onClick={salvaProgetto} disabled={saveState.status === "loading"}>
+          {saveState.status === "loading" && <span className="spinner" />}
+          💾 Salva progetto
+        </button>
+        {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
+        {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
+      </div>
 
       <div className="header">
         <div className="company-card">

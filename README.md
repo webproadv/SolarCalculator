@@ -28,7 +28,29 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
 | `ANTHROPIC_MODEL` | Facoltativa, default `claude-haiku-4-5-20251001` (rapido ed economico, sufficiente per leggere un grafico a barre) | — |
 
-Nessuna chiave è inclusa nel repository: vanno impostate separatamente da chi effettua il deploy.
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase (archivio progetti + whitelist accessi) | L'app non si avvia in modo funzionante: salvataggio/recupero progetti e verifica accessi falliscono |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role Supabase (Settings → API), usata **solo lato server** nelle API route e nel middleware — non è mai esposta al browser | Come sopra |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Chiave pubblica Clerk (autenticazione) | L'app non si avvia: Clerk richiede questa chiave |
+| `CLERK_SECRET_KEY` | Chiave segreta Clerk, usata lato server | Come sopra |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | Impostare a `/sign-in` (pagina di login personalizzata) | Clerk userebbe l'URL di default, non la pagina del progetto |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Impostare a `/sign-up` (pagina di registrazione personalizzata) | Come sopra |
+
+Nessuna chiave è inclusa nel repository: vanno impostate separatamente da chi effettua il deploy (su Vercel: Settings → Environment Variables).
+
+## Accesso controllato (Clerk) e archivio progetti (Supabase)
+
+L'app è protetta da autenticazione: **nessuna pagina è raggiungibile senza aver effettuato l'accesso** (`middleware.js` la blocca a livello di richiesta, non solo lato interfaccia). Il modello di autorizzazione è "registrazione libera + whitelist email":
+
+1. Chiunque può creare un account con Clerk (`/sign-up`) usando la propria email.
+2. Dopo il login, il middleware verifica che l'email dell'utente sia presente nella tabella Supabase `authorized_emails`. Se non lo è, viene mostrata la pagina `/non-autorizzato` (o, per le chiamate API, un errore 403) e l'app resta inaccessibile.
+3. Per autorizzare una persona, basta aggiungere una riga nella tabella `authorized_emails` (colonna `email`) dal SQL editor di Supabase — non serve nessuna modifica al codice o un nuovo deploy:
+   ```sql
+   insert into public.authorized_emails (email, note) values ('nome.cognome@lenergy.it', 'Commerciale');
+   ```
+
+Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva progetto"** in dashboard: viene creata una riga nella tabella Supabase `progetti`, con uno snapshot completo di azienda, preventivo, consumi mensili e valori proposti (impianto, accumulo, costo) — pensato anche per la futura funzione di stampa PDF, che potrà leggere questi stessi dati senza richiamare di nuovo le API esterne. La pagina **"📂 I miei progetti"** (in alto, sempre visibile) elenca tutti i progetti salvati da chiunque sia autorizzato — è un archivio condiviso di lavoro, non separato per singolo utente — e permette di riaprirli in dashboard con i valori con cui erano stati salvati.
+
+Lo schema del database si trova in `supabase/migrations/` (compatibile con l'integrazione GitHub di Supabase per la sincronizzazione automatica delle migrazioni: se collegata, basta un push su `main` per applicarlo; in alternativa va incollato manualmente nello SQL editor di Supabase).
 
 ## Foto satellitare e simulazione pannelli sul tetto
 
@@ -77,8 +99,10 @@ npm run dev
 
 ## Limiti noti (MVP)
 
-- Nessun salvataggio dei preventivi generati (nessun database collegato).
-- Nessuna generazione PDF del preventivo.
+- Ogni "Salva progetto" crea una nuova riga in `progetti` (nessun "aggiorna" esplicito su un progetto esistente): utile come storico automatico delle revisioni per uno stesso cliente, ma l'elenco può accumulare più salvataggi dello stesso preventivo.
+- Aprendo un progetto salvato da "I miei progetti", la foto satellitare e la simulazione pannelli non vengono rigenerate automaticamente (per non consumare quota Google Solar API ad ogni apertura): va rigenerato un nuovo preventivo per averle.
+- L'archivio progetti è condiviso tra tutti gli utenti autorizzati (non è diviso per singolo utente): adatto a un piccolo team che lavora sugli stessi clienti.
+- Nessuna generazione PDF del preventivo (previsto in seguito: i dati necessari sono già salvati per intero nella colonna `dati` di `progetti`).
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).
 - Il conteggio pannelli e la superficie utile restano stime aggregate (modulo da 505 Wp, ≈4,1 m²/kWp); la simulazione fotografica del layout (vedi sopra) usa le posizioni candidate calcolate dall&apos;algoritmo di Google, non un progetto elettrico/strutturale reale del tetto.
 - La scheda con la geometria di dettaglio dei segmenti di tetto (aree, pitch, azimuth) non è più mostrata in dashboard: resta usata solo internamente per la foto satellitare e la simulazione pannelli.

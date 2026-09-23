@@ -75,6 +75,13 @@ button{ font-family:inherit; }
 .brandmark .dot{ width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg, var(--c-f1), var(--c-f2)); flex:none; }
 .brandmark b{ font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:14.5px; letter-spacing:.01em; }
 .brandmark small{ color:var(--ink-faint); font-size:12px; }
+.topnav-actions{ display:flex; align-items:center; gap:12px; }
+.topnav-actions .btn{ padding:8px 14px; font-size:13.5px; }
+
+.save-bar{ display:flex; align-items:center; gap:14px; margin-top:20px; }
+.save-feedback{ font-size:13px; }
+.save-feedback.good{ color:var(--c-good); }
+.save-feedback.error{ color:var(--crit); }
 
 .demo-banner{ background:var(--warn-soft); border-bottom:1px solid var(--warn); color:var(--warn); font-family:"IBM Plex Mono", monospace; font-size:12.5px; letter-spacing:.04em; text-transform:uppercase; text-align:center; padding:8px 16px; font-weight:600; }
 .demo-banner span{ color:var(--ink-soft); text-transform:none; letter-spacing:0; font-weight:400; }
