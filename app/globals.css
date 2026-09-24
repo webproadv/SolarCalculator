@@ -200,13 +200,18 @@ th.num{ text-align:right; }
 .bar{ width:100%; max-width:26px; border-radius:4px 4px 2px 2px; background:var(--c-f1); }
 .bar-month{ font-size:10px; color:var(--ink-faint); margin-top:6px; font-family:"IBM Plex Mono"; }
 
-/* Grafico combinato consumi (diurno/notturno impilati) vs produzione mensile */
+/* Grafico combinato consumi (diurno/notturno impilati) vs produzione mensile.
+   Colonne a larghezza flessibile (flex:1, come .bar-col sopra) invece che a
+   larghezza fissa in pixel: si adattano sempre alla larghezza disponibile,
+   sia a schermo sia (soprattutto) in stampa, dove il contenitore è più
+   stretto di uno schermo desktop — con colonne a larghezza fissa e
+   overflow-x:auto il grafico veniva tagliato invece di restringersi. */
 .combo-legend{ display:flex; gap:18px; flex-wrap:wrap; margin-bottom:14px; }
-.combo-chart{ display:flex; align-items:flex-end; gap:16px; height:220px; padding-top:8px; overflow-x:auto; }
-.combo-month{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; flex:none; }
-.combo-bars{ display:flex; align-items:flex-end; gap:5px; height:100%; }
-.combo-bar-group{ width:22px; display:flex; flex-direction:column; border-radius:4px 4px 2px 2px; overflow:hidden; }
-.combo-bar-solid{ width:22px; border-radius:4px 4px 2px 2px; background:var(--warn); }
+.combo-chart{ display:flex; align-items:flex-end; gap:clamp(4px, 1vw, 16px); height:220px; padding-top:8px; }
+.combo-month{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; flex:1; min-width:0; }
+.combo-bars{ display:flex; align-items:flex-end; justify-content:center; gap:3px; height:100%; width:100%; }
+.combo-bar-group{ flex:1; max-width:22px; display:flex; flex-direction:column; border-radius:4px 4px 2px 2px; overflow:hidden; }
+.combo-bar-solid{ flex:1; max-width:22px; border-radius:4px 4px 2px 2px; background:var(--warn); }
 .combo-month-label{ font-size:10px; color:var(--ink-faint); margin-top:8px; font-family:"IBM Plex Mono"; }
 
 .econ-row{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
@@ -238,47 +243,79 @@ th.num{ text-align:right; }
   .meta-grid{ grid-template-columns:1fr 1fr; }
 }
 
-/* ============ STAMPA / PDF (bottone "Stampa preventivo" → window.print) ============ */
-.print-header{ display:none; }
+/* ============ STAMPA / PDF (bottone "Stampa preventivo" → window.print) ============
+   Il documento stampato NON è una stampa della dashboard interattiva: è un
+   report a parte (.print-report, sempre presente nel DOM ma nascosto a
+   schermo), impaginato come una vera analisi energetica — una sezione
+   lettera per pagina, tipografia da documento (titoli in IBM Plex Serif),
+   tabelle invece delle card colorate, grafici SVG con viewBox (si adattano
+   sempre alla larghezza della pagina, niente tagli). La dashboard a schermo
+   (.screen-only) viene semplicemente nascosta in stampa. */
+.print-report{ display:none; }
+
+@page{ size:A4; margin:16mm 15mm; }
 
 @media print{
-  /* Forza sempre tema chiaro in stampa, indipendentemente dal tema a schermo
-     (dark mode di sistema o data-theme="dark") — risparmia inchiostro e
-     resta leggibile su carta. Ultimo blocco del file: vince a parità di
-     specificità sulle regole dark mode sopra. */
   :root, :root[data-theme="dark"], :root:not([data-theme="light"]){
-    --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F4F5F1; --surface-3:#ECEEE9;
-    --ink:#171D1B; --ink-soft:#4B564F; --ink-faint:#7A857D;
-    --border:#D8DCD3; --border-strong:#C3C9BC;
-    --shadow:none;
+    --bg:#FFFFFF; --surface:#FFFFFF;
   }
   *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
-  body{ background:#fff; font-size:12px; }
+  body{ background:#fff; }
 
-  /* Solo il contenuto del preventivo: via barra di navigazione, pulsanti,
-     banner "dati di esempio", messaggi di errore/stato — niente di tutto
-     questo ha senso su un documento stampato/salvato in PDF. */
-  .topnav, .save-bar, .demo-banner, .btn, .error-box, .info-box{ display:none !important; }
+  .screen-only{ display:none !important; }
 
-  .wrap{ max-width:none; padding:0; }
-  .header{ padding:0 0 16px; }
-
-  .print-header{ display:block; margin-bottom:18px; padding-bottom:12px; border-bottom:2px solid var(--ink); }
-  .print-header-title{ font-size:19px; font-weight:700; }
-  .print-header-meta{ font-size:11.5px; color:var(--ink-soft); margin-top:4px; }
-
-  /* Un blocco (o riga di card) non spezzato a metà tra due pagine; ogni
-     Sezione (A/B/C/D) inizia su una pagina nuova, tranne la prima che segue
-     direttamente l'intestazione azienda. */
-  .card, .company-card, .kpi-strip{ box-shadow:none; break-inside:avoid; }
-  section.block{ break-before:page; margin-top:0; padding-top:24px; }
-  section.block:first-of-type{ break-before:auto; }
-  .footnote{ break-inside:avoid; margin-top:24px; }
-
-  /* I campi editabili (impianto/accumulo/costo proposti) mostrano solo il
-     valore, senza bordo/casella input, per un aspetto da documento. */
-  input[type="number"], input[type="text"]{
-    border:none !important; background:transparent !important; padding:0 !important;
-    -webkit-appearance:none; appearance:none; font-weight:600;
+  .print-report{
+    display:block;
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    color:#171D1B;
+    font-size:12px;
+    line-height:1.5;
   }
+
+  .pr-page{ break-after:page; }
+  .pr-page:last-child{ break-after:auto; }
+
+  .pr-running-header{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-family:"IBM Plex Mono", monospace; font-size:9px; letter-spacing:.04em; text-transform:uppercase;
+    color:#7A857D; border-bottom:1px solid #D8DCD3; padding-bottom:7px; margin-bottom:20px;
+  }
+  .pr-footer{
+    display:flex; justify-content:space-between;
+    font-family:"IBM Plex Mono", monospace; font-size:9px; color:#7A857D;
+    border-top:1px solid #D8DCD3; padding-top:6px; margin-top:22px;
+  }
+
+  .pr-eyebrow{ font-family:"IBM Plex Mono", monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#B8791F; font-weight:600; margin-bottom:8px; }
+  .pr-h1{ font-family:"IBM Plex Serif", Georgia, "Times New Roman", serif; font-size:27px; font-weight:600; margin:0 0 8px; letter-spacing:-.01em; }
+  .pr-h2{ font-family:"IBM Plex Serif", Georgia, "Times New Roman", serif; font-size:18px; font-weight:600; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+  .pr-h3{ font-family:"IBM Plex Serif", Georgia, "Times New Roman", serif; font-size:13.5px; font-weight:600; margin:22px 0 8px; }
+  .pr-lead{ font-size:12.5px; color:#4B564F; margin:0 0 20px; }
+  .pr-note{ font-size:10.5px; color:#7A857D; line-height:1.6; margin:4px 0 14px; }
+  .pr-section-tag{
+    font-family:"IBM Plex Mono", monospace; font-size:12px; font-weight:700;
+    background:#171D1B; color:#fff; border-radius:5px; padding:2px 9px; letter-spacing:.02em;
+  }
+
+  .pr-cover-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; margin:20px 0 30px; }
+  .pr-cover-meta dt{ font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:#7A857D; margin-bottom:2px; }
+  .pr-cover-meta dd{ margin:0; font-family:"IBM Plex Mono", monospace; font-weight:600; font-size:12.5px; }
+
+  .pr-kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); border:1px solid #D8DCD3; border-radius:6px; overflow:hidden; margin:0 0 26px; }
+  .pr-kpi{ padding:13px 11px; border-right:1px solid #D8DCD3; }
+  .pr-kpi:last-child{ border-right:none; }
+  .pr-kpi .v{ display:block; font-family:"IBM Plex Mono", monospace; font-weight:700; font-size:16.5px; }
+  .pr-kpi .l{ font-size:9px; color:#7A857D; margin-top:4px; line-height:1.3; }
+
+  .pr-cols-2{ display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; }
+  .pr-photo{ width:100%; border-radius:6px; border:1px solid #D8DCD3; display:block; }
+
+  .pr-table{ width:100%; border-collapse:collapse; font-size:11px; margin:8px 0 6px; }
+  .pr-table th, .pr-table td{ border:1px solid #D8DCD3; padding:6px 9px; text-align:left; }
+  .pr-table th{ background:#F4F5F1; font-family:"IBM Plex Mono", monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:#4B564F; font-weight:600; }
+  .pr-table td.num, .pr-table th.num{ text-align:right; font-family:"IBM Plex Mono", monospace; }
+  .pr-table tr.total td{ font-weight:700; background:#F4F5F1; }
+
+  .pr-legend{ display:flex; gap:18px; font-size:10px; color:#4B564F; margin:0 0 6px; }
+  .pr-legend-dot{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:middle; }
 }

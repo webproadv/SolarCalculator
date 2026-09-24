@@ -316,12 +316,11 @@ export default function Page() {
     }
   }
 
-  // Foto satellitare + simulazione pannelli sul tetto (Google Solar API
-  // dataLayers): generata automaticamente non appena è pronto un preventivo
-  // reale (non demo) con posizioni pannelli disponibili — nessuna azione
-  // richiesta all'utente.
+  // Foto satellitare del sito (Google Solar API dataLayers): generata
+  // automaticamente non appena è pronto un preventivo reale (non demo) con
+  // un rilievo del tetto disponibile — nessuna azione richiesta all'utente.
   async function fetchRoofImagesAuto(quoteData, companyData) {
-    if (!quoteData?.roof?.solarPanels?.length) return;
+    if (quoteData?.demo || quoteData?.roofDataUnavailable || !quoteData?.roof?.segments?.length) return;
     setRoofImagesError("");
     setRoofImagesLoading(true);
     try {
@@ -332,12 +331,10 @@ export default function Page() {
           lat: companyData.lat,
           lng: companyData.lng,
           segments: quoteData.roof.segments,
-          solarPanels: quoteData.roof.solarPanels,
-          panelsCount: Math.round((quoteData.sizing.kwpSuggerito * 1000) / DEFAULTS.panelWp),
         }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Errore nella generazione delle foto.");
+      if (!r.ok) throw new Error(data.error || "Errore nella generazione della foto.");
       setRoofImages(data);
     } catch (err) {
       setRoofImagesError(err.message);
@@ -808,7 +805,6 @@ function Dashboard({
 }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
-  const hasPanelsData = quote.roof.solarPanels?.length > 0;
 
   // Impianto, accumulo e costo proposti: pre-compilati con i valori
   // suggeriti dal calcolo, ma sempre modificabili — dal loro valore
@@ -892,11 +888,7 @@ function Dashboard({
 
   return (
     <div className="wrap">
-      <div className="print-header">
-        <div className="print-header-title">Preventivo impianto fotovoltaico — {company.ragioneSociale}</div>
-        <div className="print-header-meta">Lenergy Spa — Business Energy Advisor · Generato il {new Date().toLocaleDateString("it-IT")}</div>
-      </div>
-
+    <div className="screen-only">
       {(quote.demo || company?.demo) && (
         <div className="demo-banner" style={{ margin: "0 -24px 24px" }}>
           DATI DI ESEMPIO — alcune sorgenti non sono configurate su questa istanza (vedi README)
@@ -982,29 +974,49 @@ function Dashboard({
           </div>
         </div>
 
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Simulazione pannelli sul tetto</h3>
-          <div className="card-note">
-            Impianto proposto sovrapposto alla foto aerea del sito (già mostrata in alto), generato automaticamente dal layer RGB della Google Solar API.
+        <div className="grid-2" style={{ marginTop: 20 }}>
+          <div className="card">
+            <h3>Foto satellitare del sito</h3>
+            <div className="card-note">Rilievo aereo dell'edificio, generato automaticamente dal layer RGB della Google Solar API.</div>
+            <div style={{ marginTop: 12 }}>
+              {roofImages ? (
+                <img src={roofImages.satelliteImageUrl} alt="Foto aerea satellitare del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+              ) : roofImagesLoading ? (
+                <p className="hint"><span className="spinner" style={{ marginRight: 8 }} />Generazione foto in corso…</p>
+              ) : (
+                <div className="card-note">
+                  Non disponibile: {quote.demo
+                    ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
+                    : quote.roofDataUnavailable
+                    ? "nessun rilievo satellitare Google per questo indirizzo."
+                    : "in generazione o non riuscita — vedi eventuale messaggio sotto."}
+                </div>
+              )}
+              {roofImagesError && <div className="error-box" style={{ marginTop: 10 }}>{roofImagesError}</div>}
+            </div>
           </div>
-
-          {!hasPanelsData ? (
-            <div className="card-note" style={{ marginTop: 10 }}>
-              Non disponibile: {quote.demo
-                ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
-                : "la Solar API non ha restituito dati sui pannelli per questo sito."}
+          <div className="card">
+            <h3>Superficie disponibile per i pannelli</h3>
+            <div className="card-note">Rilievo del tetto (Google Solar API) e ingombro stimato dell'impianto proposto</div>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
+              <StatMini
+                v={quote.roof.maxArrayAreaMeters2 ? `${Math.round(quote.roof.maxArrayAreaMeters2).toLocaleString("it-IT")} m²` : "n/d"}
+                l="Superficie utile rilevata sul tetto"
+              />
+              <StatMini
+                v={quote.roof.maxArrayPanelsCount ? `${quote.roof.maxArrayPanelsCount}` : "n/d"}
+                l="Pannelli massimi installabili (stima Google)"
+              />
+              <StatMini v={`${pannelliStimati}`} l="Pannelli dell'impianto proposto" />
+              <StatMini v={`${areaUtileStimataM2.toLocaleString("it-IT")} m²`} l="Superficie stimata occupata dall'impianto proposto" />
+              {quote.roof.maxArrayAreaMeters2 ? (
+                <StatMini
+                  v={`${Math.min(100, Math.round((areaUtileStimataM2 / quote.roof.maxArrayAreaMeters2) * 100))}%`}
+                  l="Copertura della superficie utile disponibile"
+                />
+              ) : null}
             </div>
-          ) : roofImagesLoading ? (
-            <p className="hint" style={{ marginTop: 10 }}><span className="spinner" style={{ marginRight: 8 }} />Generazione foto in corso…</p>
-          ) : roofImages ? (
-            <div style={{ marginTop: 14, maxWidth: 480 }}>
-              <img src={roofImages.panelsImageUrl} alt="Simulazione pannelli sul tetto" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-              <div className="card-note" style={{ marginTop: 6 }}>
-                Impianto proposto: {roofImages.panelsProposti} pannelli in verde (su {roofImages.panelsTotaliDisponibili} posizioni possibili, in grigio)
-              </div>
-            </div>
-          ) : null}
-          {roofImagesError && <div className="error-box" style={{ marginTop: 10 }}>{roofImagesError}</div>}
+          </div>
         </div>
       </section>
 
@@ -1162,6 +1174,342 @@ function Dashboard({
         preventivo tecnico vincolante.
       </div>
     </div>
+
+      <PrintReport
+        company={company}
+        quote={quote}
+        roofImages={roofImages}
+        kwp={kwp}
+        batteriaKwh={batteriaKwh}
+        costoImpianto={costoImpianto}
+        produzioneAnnuaTotaleKwh={produzioneAnnuaTotaleKwh}
+        monthlyProduction={monthlyProduction}
+        monthlyDiurno={monthlyDiurno}
+        monthlyNotturno={monthlyNotturno}
+        autoconsumoSim={autoconsumoSim}
+        autoconsumoPct={autoconsumoPct}
+        econ={econ}
+        payback={payback}
+        co2={co2}
+        pannelliStimati={pannelliStimati}
+        areaUtileStimataM2={areaUtileStimataM2}
+      />
+    </div>
+  );
+}
+
+// Documento stampabile a parte, sempre presente nel DOM (nascosto a schermo,
+// vedi .print-report in globals.css) e mostrato SOLO da window.print(): non
+// è la dashboard interattiva riadattata, ma un report impaginato come una
+// vera analisi energetica — una sezione per pagina, tipografia da documento,
+// tabelle al posto delle card colorate, grafici SVG con viewBox (si
+// riscalano sempre alla larghezza della pagina, mai tagliati).
+function PrintReport({
+  company,
+  quote,
+  roofImages,
+  kwp,
+  batteriaKwh,
+  costoImpianto,
+  produzioneAnnuaTotaleKwh,
+  monthlyProduction,
+  monthlyDiurno,
+  monthlyNotturno,
+  autoconsumoSim,
+  autoconsumoPct,
+  econ,
+  payback,
+  co2,
+  pannelliStimati,
+  areaUtileStimataM2,
+}) {
+  const oggi = new Date().toLocaleDateString("it-IT");
+  const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
+    ? Math.min(100, Math.round((areaUtileStimataM2 / quote.roof.maxArrayAreaMeters2) * 100))
+    : null;
+
+  return (
+    <div className="print-report">
+      {/* Pagina 1 — copertina e sintesi */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>Analisi energetica — {company.ragioneSociale}</span>
+          <span>{oggi}</span>
+        </div>
+
+        <div className="pr-eyebrow">Analisi energetica e proposta impianto fotovoltaico</div>
+        <h1 className="pr-h1">{company.ragioneSociale}</h1>
+        <p className="pr-lead">
+          {company.indirizzo}, {company.cap} {company.comune} ({company.provincia}) — P.IVA {company.piva}
+        </p>
+
+        <dl className="pr-cover-meta">
+          <div><dt>Coordinate sito</dt><dd>{company.lat.toFixed(4)}, {company.lng.toFixed(4)}</dd></div>
+          <div><dt>Preparato da</dt><dd>Lenergy Spa — Business Energy Advisor</dd></div>
+          <div><dt>Spesa energetica annua (IVA inclusa)</dt><dd>€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd></div>
+          <div><dt>Consumo annuo dichiarato</dt><dd>{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</dd></div>
+        </dl>
+
+        <h2 className="pr-h2" style={{ marginBottom: 12 }}>Sintesi della proposta</h2>
+        <div className="pr-kpi-grid">
+          <div className="pr-kpi"><span className="v">{kwp} kWp</span><span className="l">Potenza impianto proposta</span></div>
+          <div className="pr-kpi"><span className="v">{(produzioneAnnuaTotaleKwh / 1000).toFixed(1)} MWh</span><span className="l">Produzione annua stimata</span></div>
+          <div className="pr-kpi"><span className="v">{autoconsumoPct}%</span><span className="l">Autoconsumo stimato</span></div>
+          <div className="pr-kpi"><span className="v">€ {econ.beneficioTotale.toLocaleString("it-IT")}</span><span className="l">Beneficio economico annuo (IVA escl.)</span></div>
+          <div className="pr-kpi"><span className="v">{payback ?? "—"} anni</span><span className="l">Tempo di rientro stimato</span></div>
+        </div>
+
+        <p className="pr-note">
+          Il presente documento riassume l&apos;analisi dei consumi energetici, il dimensionamento dell&apos;impianto
+          fotovoltaico proposto e le relative stime economiche, elaborate da Lenergy Spa sulla base dei dati forniti
+          dal cliente e dei rilievi disponibili tramite Google Solar API. I contenuti sono organizzati nelle sezioni
+          seguenti: A) Producibilità fotovoltaica, B) Dimensionamento dell&apos;impianto, C) Andamento mensile di
+          consumi e produzione, D) Dati di partenza.
+        </p>
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 1</span></div>
+      </div>
+
+      {/* Pagina 2 — Sezione A: Producibilità fotovoltaica */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>{company.ragioneSociale}</span>
+          <span>Sezione A — Producibilità fotovoltaica</span>
+        </div>
+        <h2 className="pr-h2"><span className="pr-section-tag">A</span>Producibilità fotovoltaica</h2>
+
+        <div className="pr-cols-2" style={{ marginTop: 18 }}>
+          <div>
+            <p className="pr-note" style={{ marginTop: 0 }}>Rilievo aereo del sito (Google Solar API)</p>
+            {roofImages?.satelliteImageUrl ? (
+              <img src={roofImages.satelliteImageUrl} alt="Foto satellitare del sito" className="pr-photo" />
+            ) : (
+              <p className="pr-note">Foto satellitare non disponibile per questo indirizzo.</p>
+            )}
+          </div>
+          <div>
+            <p className="pr-note" style={{ marginTop: 0 }}>Superficie disponibile e impianto proposto</p>
+            <table className="pr-table">
+              <tbody>
+                <tr><td>Superficie utile rilevata sul tetto</td><td className="num">{quote.roof.maxArrayAreaMeters2 ? `${Math.round(quote.roof.maxArrayAreaMeters2).toLocaleString("it-IT")} m²` : "n/d"}</td></tr>
+                <tr><td>Pannelli massimi installabili (stima Google)</td><td className="num">{quote.roof.maxArrayPanelsCount || "n/d"}</td></tr>
+                <tr><td>Pannelli dell&apos;impianto proposto</td><td className="num">{pannelliStimati}</td></tr>
+                <tr><td>Superficie stimata occupata dall&apos;impianto</td><td className="num">{areaUtileStimataM2.toLocaleString("it-IT")} m²</td></tr>
+                {coperturaSuperficiePct != null && (
+                  <tr><td>Copertura della superficie disponibile</td><td className="num">{coperturaSuperficiePct}%</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h3 className="pr-h3">Produzione mensile stimata</h3>
+        <PrintBarChart data={monthlyProduction} />
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 2</span></div>
+      </div>
+
+      {/* Pagina 3 — Sezione B: Dimensionamento impianto */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>{company.ragioneSociale}</span>
+          <span>Sezione B — Dimensionamento dell&apos;impianto</span>
+        </div>
+        <h2 className="pr-h2"><span className="pr-section-tag">B</span>Dimensionamento dell&apos;impianto</h2>
+
+        <h3 className="pr-h3" style={{ marginTop: 16 }}>Riepilogo consumi</h3>
+        <table className="pr-table">
+          <tbody>
+            <tr><td>Totale F1 — punta ({quote.input.f1Pct}%)</td><td className="num">{quote.input.f1Kwh.toLocaleString("it-IT")} kWh</td></tr>
+            <tr><td>Totale F2 — intermedia ({quote.input.f2Pct}%)</td><td className="num">{quote.input.f2Kwh.toLocaleString("it-IT")} kWh</td></tr>
+            <tr><td>Totale F3 — fuori punta ({quote.input.f3Pct}%)</td><td className="num">{quote.input.f3Kwh.toLocaleString("it-IT")} kWh</td></tr>
+            <tr><td>Consumo totale annuo</td><td className="num">{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</td></tr>
+            <tr><td>Giorni lavorativi dichiarati</td><td className="num">{quote.input.giorniLavorativi} giorni/sett.</td></tr>
+            <tr><td>Consumo diurno</td><td className="num">{quote.input.consumoDiurnoKwh.toLocaleString("it-IT")} kWh</td></tr>
+            <tr><td>Consumo notturno</td><td className="num">{quote.input.consumoNotturnoKwh.toLocaleString("it-IT")} kWh</td></tr>
+          </tbody>
+        </table>
+
+        <h3 className="pr-h3">Impianto e accumulo proposti</h3>
+        <table className="pr-table">
+          <tbody>
+            <tr><td>Potenza impianto proposta</td><td className="num">{kwp} kWp</td></tr>
+            <tr><td>Potenza accumulo proposta</td><td className="num">{batteriaKwh} kWh</td></tr>
+            <tr><td>Costo impianto proposto (impianto + accumulo)</td><td className="num">€ {costoImpianto.toLocaleString("it-IT")}</td></tr>
+            <tr><td>% autoconsumo ottenuta (simulazione mensile)</td><td className="num">{autoconsumoPct}%</td></tr>
+          </tbody>
+        </table>
+
+        <h3 className="pr-h3">Composizione del beneficio annuo (IVA esclusa)</h3>
+        <table className="pr-table">
+          <tbody>
+            <tr><td>Risparmio in bolletta</td><td className="num">€ {econ.risparmioBolletta.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Ricavo GSE (ritiro dedicato)</td><td className="num">€ {econ.ricavoGSE.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Ricavo CER</td><td className="num">€ {econ.ricavoCER.toLocaleString("it-IT")}</td></tr>
+            <tr className="total"><td>Beneficio totale annuo</td><td className="num">€ {econ.beneficioTotale.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Tempo di rientro stimato</td><td className="num">{payback ?? "—"} anni</td></tr>
+            <tr><td>CO₂ evitata stimata / anno</td><td className="num">{co2} t</td></tr>
+          </tbody>
+        </table>
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 3</span></div>
+      </div>
+
+      {/* Pagina 4 — Sezione C: andamento mensile */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>{company.ragioneSociale}</span>
+          <span>Sezione C — Andamento mensile</span>
+        </div>
+        <h2 className="pr-h2"><span className="pr-section-tag">C</span>Andamento mensile di consumi e produzione</h2>
+
+        <div className="pr-legend">
+          <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
+          <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
+          <span><span className="pr-legend-dot" style={{ background: "#B8541F" }} />Produzione impianto</span>
+        </div>
+        <PrintComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
+
+        <h3 className="pr-h3">Bilancio energetico mensile (simulazione autoconsumo)</h3>
+        <table className="pr-table" style={{ fontSize: 10 }}>
+          <thead>
+            <tr>
+              <th>Mese</th>
+              <th className="num">Diurno (kWh)</th>
+              <th className="num">Notturno (kWh)</th>
+              <th className="num">Produzione (kWh)</th>
+              <th className="num">Autoconsumo (kWh)</th>
+              <th className="num">Immissione (kWh)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {autoconsumoSim.mesi.map((m, i) => (
+              <tr key={i}>
+                <td>{MESI_BREVI[i]}</td>
+                <td className="num">{monthlyDiurno[i].toLocaleString("it-IT")}</td>
+                <td className="num">{monthlyNotturno[i].toLocaleString("it-IT")}</td>
+                <td className="num">{m.produzione.toLocaleString("it-IT")}</td>
+                <td className="num">{m.autoconsumo.toLocaleString("it-IT")}</td>
+                <td className="num">{m.immissione.toLocaleString("it-IT")}</td>
+              </tr>
+            ))}
+            <tr className="total">
+              <td>Totale</td>
+              <td className="num">{monthlyDiurno.reduce((s, v) => s + v, 0).toLocaleString("it-IT")}</td>
+              <td className="num">{monthlyNotturno.reduce((s, v) => s + v, 0).toLocaleString("it-IT")}</td>
+              <td className="num">{autoconsumoSim.totaleProduzione.toLocaleString("it-IT")}</td>
+              <td className="num">{autoconsumoSim.totaleAutoconsumo.toLocaleString("it-IT")}</td>
+              <td className="num">{autoconsumoSim.totaleImmissione.toLocaleString("it-IT")}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 4</span></div>
+      </div>
+
+      {/* Pagina 5 — Sezione D: dati di partenza + nota metodologica */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>{company.ragioneSociale}</span>
+          <span>Sezione D — Dati di partenza</span>
+        </div>
+        <h2 className="pr-h2"><span className="pr-section-tag">D</span>Dati di partenza</h2>
+
+        <table className="pr-table" style={{ marginTop: 16 }}>
+          <tbody>
+            <tr><td>Ripartizione F1 — punta</td><td className="num">{quote.input.f1Pct}%</td></tr>
+            <tr><td>Ripartizione F2 — intermedia</td><td className="num">{quote.input.f2Pct}%</td></tr>
+            <tr><td>Ripartizione F3 — fuori punta</td><td className="num">{quote.input.f3Pct}%</td></tr>
+            <tr><td>Spesa energetica annua (IVA inclusa)</td><td className="num">€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Spesa energetica annua netta (IVA esclusa)</td><td className="num">€ {econ.spesaAnnuaNetta.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Prezzo medio energia (IVA esclusa)</td><td className="num">€ {econ.prezzoMedio.toFixed(3)}/kWh</td></tr>
+            <tr><td>Tariffa GSE (ritiro dedicato)</td><td className="num">{quote.input.tariffaGSE} €/kWh</td></tr>
+            <tr><td>Tariffa CER</td><td className="num">{quote.input.tariffaCER} €/kWh</td></tr>
+          </tbody>
+        </table>
+
+        <h3 className="pr-h3">Nota metodologica</h3>
+        <p className="pr-note" style={{ fontSize: 10.5 }}>
+          La produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step
+          Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità
+          tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla
+          ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
+          una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
+          disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
+          La tariffa CER ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia
+          immessa — nella realtà si applica solo alla quota effettivamente condivisa entro la comunità energetica.
+          Questo è un documento indicativo, non un preventivo tecnico vincolante.
+        </p>
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 5</span></div>
+      </div>
+    </div>
+  );
+}
+
+// Grafico a barre mensile per il documento di stampa: SVG con viewBox fisso
+// (width:100% via CSS, nessun overflow-x) — si riscala sempre alla larghezza
+// disponibile sulla pagina, a differenza del grafico a schermo (div/flex).
+function PrintBarChart({ data, color = "#B8791F" }) {
+  const width = 760;
+  const height = 130;
+  const max = Math.max(...data, 1);
+  const n = data.length;
+  const gap = 6;
+  const barW = (width - gap * (n - 1)) / n;
+  return (
+    <svg viewBox={`0 0 ${width} ${height + 22}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      {data.map((v, i) => {
+        const h = (v / max) * height;
+        const x = i * (barW + gap);
+        const y = height - h;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={h} fill={color} rx={2} />
+            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
+              {MESI_BREVI[i]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// Grafico combinato (consumo diurno/notturno impilati + produzione) per il
+// documento di stampa: stessa logica di ComboChart ma disegnata come SVG con
+// viewBox fisso, così si adatta sempre alla larghezza della pagina stampata.
+function PrintComboChart({ diurno, notturno, produzione }) {
+  const width = 760;
+  const height = 150;
+  const totali = diurno.map((d, i) => d + (notturno[i] || 0));
+  const max = Math.max(...totali, ...produzione, 1);
+  const n = diurno.length;
+  const groupGap = 10;
+  const groupW = (width - groupGap * (n - 1)) / n;
+  const barGap = 3;
+  const barW = (groupW - barGap) / 2;
+  return (
+    <svg viewBox={`0 0 ${width} ${height + 22}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      {diurno.map((d, i) => {
+        const not = notturno[i] || 0;
+        const p = produzione[i] || 0;
+        const gx = i * (groupW + groupGap);
+        const hDiu = (d / max) * height;
+        const hNot = (not / max) * height;
+        const hProd = (p / max) * height;
+        return (
+          <g key={i}>
+            <rect x={gx} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1.5} />
+            <rect x={gx} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1.5} />
+            <rect x={gx + barW + barGap} y={height - hProd} width={barW} height={hProd} fill="#B8541F" rx={1.5} />
+            <text x={gx + groupW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
+              {MESI_BREVI[i]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
