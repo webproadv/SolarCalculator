@@ -26,7 +26,7 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `APIFY_API_TOKEN` | Lookup ragione sociale/indirizzo da Partita IVA tramite l'actor Apify `dltik/italy-company-registry-scraper` (Registro Imprese/VIES) — fonte preferita | Se assente, si usa `OPENAPI_KEY` come alternativa |
 | `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
-| `ANTHROPIC_MODEL` | Facoltativa, default `claude-haiku-4-5-20251001` (rapido ed economico, sufficiente per leggere un grafico a barre) | — |
+| `ANTHROPIC_MODEL` | Facoltativa, default `claude-sonnet-4-5-20250929` (più accurato di un modello Haiku nel leggere bollette con layout e grafici molto variabili) | — |
 
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase (archivio progetti + whitelist accessi) | L'app non si avvia in modo funzionante: salvataggio/recupero progetti e verifica accessi falliscono |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role Supabase (Settings → API), usata **solo lato server** nelle API route e nel middleware — non è mai esposta al browser | Come sopra |
