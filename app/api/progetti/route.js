@@ -51,7 +51,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "Corpo della richiesta non valido." }, { status: 400 });
   }
 
-  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto, nomeProgetto } = body || {};
+  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, nomeProgetto } = body || {};
   if (!company || !quote) {
     return NextResponse.json({ error: "Dati mancanti: azienda e preventivo sono obbligatori." }, { status: 400 });
   }
@@ -69,7 +69,7 @@ export async function POST(req) {
     costo_impianto_proposto: Number(costoImpiantoProposto) || null,
     // Snapshot completo: tutto ciò che serve per ricostruire la dashboard
     // (e in futuro generare il PDF) senza dover richiamare le API esterne.
-    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto },
+    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio },
   };
 
   const { data, error } = await supabaseAdmin().from("progetti").insert(row).select("id").single();

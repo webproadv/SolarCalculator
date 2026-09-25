@@ -11,7 +11,10 @@ import {
   paybackYears,
   co2Evitata,
   monthlyProductionFromShares,
+  noleggioOperativo,
 } from "../lib/calc";
+
+const RATE_NOLEGGIO_OPTIONS = [84, 72, 60];
 
 const STEPS = ["Azienda", "Consumi", "Risultati"];
 
@@ -182,6 +185,7 @@ export default function Page() {
         impiantoProposto: saved.impiantoProposto,
         accumuloProposto: saved.accumuloProposto,
         costoImpiantoProposto: saved.costoImpiantoProposto,
+        numeroRateNoleggio: saved.numeroRateNoleggio,
       });
       setStep(2);
     } catch (err) {
@@ -813,6 +817,7 @@ export default function Page() {
           initialImpiantoProposto={progettoCaricato?.impiantoProposto}
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
           initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
+          initialNumeroRateNoleggio={progettoCaricato?.numeroRateNoleggio}
         />
       )}
     </>
@@ -832,6 +837,7 @@ function Dashboard({
   initialImpiantoProposto,
   initialAccumuloProposto,
   initialCostoImpiantoProposto,
+  initialNumeroRateNoleggio,
 }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
@@ -849,6 +855,12 @@ function Dashboard({
     String(initialCostoImpiantoProposto ?? quote.sizing.investimentoSuggerito ?? "")
   );
 
+  // Numero rate del noleggio operativo (84/72/60): sceglie il tasso da
+  // applicare al costo impianto per calcolare la rata — vedi Sezione D.
+  const [numeroRateNoleggio, setNumeroRateNoleggio] = useState(
+    RATE_NOLEGGIO_OPTIONS.includes(Number(initialNumeroRateNoleggio)) ? Number(initialNumeroRateNoleggio) : 84
+  );
+
   // Salvataggio su Supabase (tabella `progetti`): ogni salvataggio crea un
   // nuovo snapshot con i valori attuali di impianto/accumulo/costo proposti.
   const [saveState, setSaveState] = useState({ status: "idle", message: "" });
@@ -859,7 +871,7 @@ function Dashboard({
       const r = await fetch("/api/progetti", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto }),
+        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
@@ -906,6 +918,11 @@ function Dashboard({
     tariffaCER: quote.input.tariffaCER,
   });
   const payback = paybackYears({ investimento: costoImpianto, beneficioAnnuo: econ.beneficioTotale });
+  const noleggio = noleggioOperativo({
+    costoImpianto,
+    numeroRate: numeroRateNoleggio,
+    beneficioTotaleAnnuo: econ.beneficioTotale,
+  });
   const co2 = co2Evitata({
     producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh,
     carbonOffsetFactorKgPerMwh: quote.roof.carbonOffsetFactorKgPerMwh ?? 350,
@@ -1164,8 +1181,55 @@ function Dashboard({
         </div>
       </section>
 
-      <section className="block" id="d">
-        <div className="block-head"><span className="block-tag">D</span><h2>Dati di partenza</h2></div>
+      <section className="block block--noleggio" id="d">
+        <div className="block-head"><span className="block-tag">D</span><h2>Soluzione economica — Noleggio operativo</h2></div>
+        <div className="block-desc">
+          Alternativa all&apos;acquisto diretto: l&apos;impianto viene noleggiato invece che acquistato. La rata dipende dal numero di rate scelto e dal costo impianto proposto in Sezione C.
+        </div>
+
+        <div className="card">
+          <h3>Numero rate</h3>
+          <div className="card-note">Determina il tasso applicato al costo impianto (€ {costoImpianto.toLocaleString("it-IT")}, da Sezione C)</div>
+          <div className="rate-tabs">
+            {RATE_NOLEGGIO_OPTIONS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`rate-tab ${numeroRateNoleggio === n ? "active" : ""}`}
+                onClick={() => setNumeroRateNoleggio(n)}
+              >
+                {n} rate
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid-3" style={{ marginTop: 16 }}>
+          <div className="noleggio-box">
+            <div className="v">€ {noleggio.rataMensile.toLocaleString("it-IT")}</div>
+            <div className="l">Rata noleggio mensile ({numeroRateNoleggio} rate)</div>
+          </div>
+          <div className="noleggio-box">
+            <div className="v">€ {noleggio.costoAnnuoNoleggio.toLocaleString("it-IT")}</div>
+            <div className="l">Costo annuo noleggio (12 rate)</div>
+          </div>
+          <div className="noleggio-box">
+            <div className="v">€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}</div>
+            <div className="l">Totale deduzione annua con noleggio (27,9%)</div>
+          </div>
+        </div>
+
+        <div className="noleggio-box lg" style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Totale beneficio annuo con noleggio</span>
+          <span className="v">€ {noleggio.beneficioTotaleConNoleggio.toLocaleString("it-IT")}</span>
+        </div>
+        <div className="hint" style={{ marginTop: 8 }}>
+          Beneficio impianto (€ {econ.beneficioTotale.toLocaleString("it-IT")}, da Sezione C) + deduzione annua da noleggio (€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}).
+        </div>
+      </section>
+
+      <section className="block" id="e">
+        <div className="block-head"><span className="block-tag">E</span><h2>Dati di partenza</h2></div>
         <div className="grid-2">
           <div className="card">
             <h3>Ripartizione consumi per fascia oraria</h3>
@@ -1223,6 +1287,8 @@ function Dashboard({
         co2={co2}
         pannelliStimati={pannelliStimati}
         areaUtileStimataM2={areaUtileStimataM2}
+        noleggio={noleggio}
+        numeroRateNoleggio={numeroRateNoleggio}
       />
     </div>
   );
@@ -1252,6 +1318,8 @@ function PrintReport({
   co2,
   pannelliStimati,
   areaUtileStimataM2,
+  noleggio,
+  numeroRateNoleggio,
 }) {
   const oggi = new Date().toLocaleDateString("it-IT");
   const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
@@ -1294,7 +1362,7 @@ function PrintReport({
           fotovoltaico proposto e le relative stime economiche, elaborate da Lenergy Spa sulla base dei dati forniti
           dal cliente e dei rilievi disponibili tramite Google Solar API. I contenuti sono organizzati nelle sezioni
           seguenti: A) Producibilità fotovoltaica, B) Dimensionamento dell&apos;impianto, C) Andamento mensile di
-          consumi e produzione, D) Dati di partenza.
+          consumi e produzione, D) Soluzione economica — Noleggio operativo, E) Dati di partenza.
         </p>
 
         <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 1</span></div>
@@ -1437,13 +1505,43 @@ function PrintReport({
         <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 4</span></div>
       </div>
 
-      {/* Pagina 5 — Sezione D: dati di partenza + nota metodologica */}
+      {/* Pagina 5 — Sezione D: Noleggio operativo */}
       <div className="pr-page">
         <div className="pr-running-header">
           <span>{company.ragioneSociale}</span>
-          <span>Sezione D — Dati di partenza</span>
+          <span>Sezione D — Noleggio operativo</span>
         </div>
-        <h2 className="pr-h2"><span className="pr-section-tag">D</span>Dati di partenza</h2>
+        <h2 className="pr-h2"><span className="pr-section-tag pr-tag-noleggio">D</span>Soluzione economica — Noleggio operativo</h2>
+        <p className="pr-lead">Alternativa all&apos;acquisto diretto: l&apos;impianto viene noleggiato invece che acquistato.</p>
+
+        <table className="pr-table pr-noleggio-table">
+          <tbody>
+            <tr><td>Costo impianto proposto (da Sezione B)</td><td className="num">€ {costoImpianto.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Numero rate</td><td className="num">{numeroRateNoleggio}</td></tr>
+            <tr><td>Rata noleggio mensile</td><td className="num">€ {noleggio.rataMensile.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Costo annuo noleggio (12 rate)</td><td className="num">€ {noleggio.costoAnnuoNoleggio.toLocaleString("it-IT")}</td></tr>
+            <tr><td>Totale deduzione annua con noleggio (27,9%)</td><td className="num">€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}</td></tr>
+          </tbody>
+        </table>
+
+        <div className="pr-noleggio-highlight">
+          <span className="l">Totale beneficio annuo con noleggio</span>
+          <span className="v">€ {noleggio.beneficioTotaleConNoleggio.toLocaleString("it-IT")}</span>
+        </div>
+        <p className="pr-note">
+          Beneficio impianto (€ {econ.beneficioTotale.toLocaleString("it-IT")}, da Sezione B) + deduzione annua da noleggio (€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}).
+        </p>
+
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 5</span></div>
+      </div>
+
+      {/* Pagina 6 — Sezione E: dati di partenza + nota metodologica */}
+      <div className="pr-page">
+        <div className="pr-running-header">
+          <span>{company.ragioneSociale}</span>
+          <span>Sezione E — Dati di partenza</span>
+        </div>
+        <h2 className="pr-h2"><span className="pr-section-tag">E</span>Dati di partenza</h2>
 
         <table className="pr-table" style={{ marginTop: 16 }}>
           <tbody>
@@ -1471,7 +1569,7 @@ function PrintReport({
           Questo è un documento indicativo, non un preventivo tecnico vincolante.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 5</span></div>
+        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 6</span></div>
       </div>
     </div>
   );

@@ -25,6 +25,10 @@
   --crit:#B33B30;
   --crit-soft:#F8E2DF;
 
+  --c-noleggio:#7C3AED;
+  --c-noleggio-soft:#F1EAFE;
+  --c-noleggio-ink:#4C2889;
+
   --shadow: 0 1px 2px rgba(23,29,27,0.06), 0 8px 24px -12px rgba(23,29,27,0.12);
   --radius: 10px;
 }
@@ -37,6 +41,7 @@
     --accent:#D9932A; --accent-soft:#2C2415; --accent-ink:#F2CE8E;
     --c-f1:#B87D22; --c-f2:#159E86; --c-f3:#6070D9; --c-good:#3F9F69; --c-grid:#159E86;
     --warn:#D97A3D; --warn-soft:#2E2115; --crit:#E0685A; --crit-soft:#301B18;
+    --c-noleggio:#A78BFA; --c-noleggio-soft:#2A2140; --c-noleggio-ink:#DDD1FB;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.55);
   }
 }
@@ -47,6 +52,7 @@
   --accent:#D9932A; --accent-soft:#2C2415; --accent-ink:#F2CE8E;
   --c-f1:#B87D22; --c-f2:#159E86; --c-f3:#6070D9; --c-good:#3F9F69; --c-grid:#159E86;
   --warn:#D97A3D; --warn-soft:#2E2115; --crit:#E0685A; --crit-soft:#301B18;
+  --c-noleggio:#A78BFA; --c-noleggio-soft:#2A2140; --c-noleggio-ink:#DDD1FB;
   --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.55);
 }
 
@@ -233,6 +239,25 @@ th.num{ text-align:right; }
 .pill.good{ background:color-mix(in srgb, var(--c-good) 16%, var(--surface)); color:var(--c-good); }
 .pill.warn{ background:var(--warn-soft); color:var(--warn); }
 
+/* ============ Sezione "Noleggio operativo" — colore dedicato per essere
+   subito distinguibile dal resto del preventivo (impianto in proprietà) ============ */
+.block--noleggio .block-tag{ background:var(--c-noleggio); }
+.block--noleggio .card{
+  border-color:color-mix(in srgb, var(--c-noleggio) 40%, var(--border));
+  background:color-mix(in srgb, var(--c-noleggio) 5%, var(--surface));
+}
+
+.rate-tabs{ display:flex; gap:8px; margin-bottom:4px; }
+.rate-tab{ flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-soft); font-size:13.5px; font-weight:600; cursor:pointer; text-align:center; transition:background .12s, color .12s, border-color .12s; font-family:"IBM Plex Mono"; }
+.rate-tab:hover:not(.active){ background:var(--surface-2); }
+.rate-tab.active{ background:var(--c-noleggio); color:#fff; border-color:var(--c-noleggio); }
+
+.noleggio-box{ background:color-mix(in srgb, var(--c-noleggio) 12%, var(--surface)); border:1px solid color-mix(in srgb, var(--c-noleggio) 45%, var(--border)); border-radius:10px; padding:14px 16px; }
+.noleggio-box .v{ font-family:"IBM Plex Mono"; font-weight:700; font-size:26px; color:var(--c-noleggio-ink); }
+.noleggio-box .l{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+.noleggio-box.lg{ padding:18px 20px; }
+.noleggio-box.lg .v{ font-size:32px; }
+
 .footnote{ margin-top:48px; padding-top:20px; border-top:1px solid var(--border); color:var(--ink-faint); font-size:12px; line-height:1.7; }
 
 @media (max-width: 860px){
@@ -296,6 +321,7 @@ th.num{ text-align:right; }
     font-family:"IBM Plex Mono", monospace; font-size:12px; font-weight:700;
     background:#171D1B; color:#fff; border-radius:5px; padding:2px 9px; letter-spacing:.02em;
   }
+  .pr-section-tag.pr-tag-noleggio{ background:#7C3AED; }
 
   .pr-cover-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px 28px; margin:20px 0 30px; }
   .pr-cover-meta dt{ font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:#7A857D; margin-bottom:2px; }
@@ -318,4 +344,9 @@ th.num{ text-align:right; }
 
   .pr-legend{ display:flex; gap:18px; font-size:10px; color:#4B564F; margin:0 0 6px; }
   .pr-legend-dot{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+
+  .pr-noleggio-table th{ background:#F1EAFE; }
+  .pr-noleggio-highlight{ background:#F1EAFE; border:1px solid #7C3AED; border-radius:6px; padding:14px 16px; margin:14px 0; display:flex; justify-content:space-between; align-items:center; }
+  .pr-noleggio-highlight .v{ font-family:"IBM Plex Mono", monospace; font-weight:700; font-size:20px; color:#4C2889; }
+  .pr-noleggio-highlight .l{ font-size:11.5px; color:#4B564F; font-weight:600; }
 }
