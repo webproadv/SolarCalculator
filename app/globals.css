@@ -258,6 +258,26 @@ th.num{ text-align:right; }
 .noleggio-box.lg{ padding:18px 20px; }
 .noleggio-box.lg .v{ font-size:32px; }
 
+/* Riepilogo flusso di cassa (senza impianto / durante noleggio / dopo
+   noleggio) — colori a foglio di calcolo (giallo/verde/arancio/rosso),
+   volutamente fissi e non legati al tema chiaro/scuro: riprendono lo
+   schema di un riepilogo excel già in uso, pensato per restare
+   immediatamente leggibile e riconoscibile a colpo d'occhio. */
+.cashflow-wrap{ display:flex; flex-direction:column; gap:14px; margin-top:16px; }
+.cashflow-title{ font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); }
+.cashflow-table{ width:100%; border-collapse:collapse; border:1px solid #171D1B; border-radius:8px; overflow:hidden; font-size:13px; }
+.cashflow-table th{ background:#F5D615; color:#171D1B; font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding:8px 10px; border:1px solid #171D1B; text-align:left; }
+.cashflow-table th.num{ text-align:right; }
+.cashflow-table td{ padding:8px 10px; border:1px solid #C3C9BC; background:#fff; color:#171D1B; }
+.cashflow-table td.cf-label{ font-weight:600; }
+.cashflow-table td.num{ font-family:"IBM Plex Mono"; text-align:right; }
+.cashflow-table td.cf-entrata.has-value{ background:#A7E8A0; }
+.cashflow-table td.cf-uscita.has-value{ background:#F6C177; }
+.cashflow-table td.cf-saldo{ text-align:center; vertical-align:middle; font-family:"IBM Plex Mono"; font-weight:700; background:#F4F5F1; }
+.cashflow-table td.cf-delta{ text-align:center; vertical-align:middle; font-family:"IBM Plex Mono"; font-weight:700; font-size:15px; }
+.cashflow-table td.cf-delta.good{ background:#8FE39B; color:#0B4A22; }
+.cashflow-table td.cf-delta.bad{ background:#F0837A; color:#5C120A; }
+
 .footnote{ margin-top:48px; padding-top:20px; border-top:1px solid var(--border); color:var(--ink-faint); font-size:12px; line-height:1.7; }
 
 @media (max-width: 860px){
@@ -349,4 +369,20 @@ th.num{ text-align:right; }
   .pr-noleggio-highlight{ background:#F1EAFE; border:1px solid #7C3AED; border-radius:6px; padding:14px 16px; margin:14px 0; display:flex; justify-content:space-between; align-items:center; }
   .pr-noleggio-highlight .v{ font-family:"IBM Plex Mono", monospace; font-weight:700; font-size:20px; color:#4C2889; }
   .pr-noleggio-highlight .l{ font-size:11.5px; color:#4B564F; font-weight:600; }
+
+  /* Riepilogo flusso di cassa nel report stampabile — stessa logica della
+     versione a schermo (.cashflow-table) ma con dimensioni/colori dedicati
+     alla stampa, coerenti con .pr-table. */
+  .pr-cashflow-title{ font-family:"IBM Plex Mono", monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:#4B564F; font-weight:700; margin:12px 0 4px; }
+  .pr-cashflow-table{ width:100%; border-collapse:collapse; font-size:10.5px; margin:0 0 4px; }
+  .pr-cashflow-table th, .pr-cashflow-table td{ border:1px solid #171D1B; padding:5px 8px; text-align:left; }
+  .pr-cashflow-table th{ background:#F5D615; font-family:"IBM Plex Mono", monospace; font-size:8.5px; text-transform:uppercase; letter-spacing:.03em; font-weight:700; color:#171D1B; }
+  .pr-cashflow-table th.num, .pr-cashflow-table td.num{ text-align:right; font-family:"IBM Plex Mono", monospace; }
+  .pr-cashflow-table td.pr-cf-label{ font-weight:600; }
+  .pr-cashflow-table td.pr-cf-entrata.has-value{ background:#A7E8A0; }
+  .pr-cashflow-table td.pr-cf-uscita.has-value{ background:#F6C177; }
+  .pr-cashflow-table td.pr-cf-saldo{ text-align:center; vertical-align:middle; font-weight:700; font-family:"IBM Plex Mono", monospace; background:#F4F5F1; }
+  .pr-cashflow-table td.pr-cf-delta{ text-align:center; vertical-align:middle; font-weight:700; font-family:"IBM Plex Mono", monospace; }
+  .pr-cashflow-table td.pr-cf-delta.good{ background:#8FE39B; color:#0B4A22; }
+  .pr-cashflow-table td.pr-cf-delta.bad{ background:#F0837A; color:#5C120A; }
 }

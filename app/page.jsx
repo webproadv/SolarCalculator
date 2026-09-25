@@ -12,9 +12,17 @@ import {
   co2Evitata,
   monthlyProductionFromShares,
   noleggioOperativo,
+  flussoCassaNoleggio,
 } from "../lib/calc";
 
 const RATE_NOLEGGIO_OPTIONS = [84, 72, 60];
+
+// Formatta un importo in euro con il segno "-" prima del simbolo (es. "-€ 560"
+// invece di "€ -560", che è quanto produrrebbe toLocaleString da solo).
+function fmtEuroSigned(v) {
+  const n = Math.round(Number(v) || 0);
+  return n < 0 ? `-€ ${Math.abs(n).toLocaleString("it-IT")}` : `€ ${n.toLocaleString("it-IT")}`;
+}
 
 const STEPS = ["Azienda", "Consumi", "Risultati"];
 
@@ -923,6 +931,14 @@ function Dashboard({
     numeroRate: numeroRateNoleggio,
     beneficioTotaleAnnuo: econ.beneficioTotale,
   });
+  const flusso = flussoCassaNoleggio({
+    spesaAnnuaNetta: econ.spesaAnnuaNetta,
+    risparmioBolletta: econ.risparmioBolletta,
+    ricavoGSE: econ.ricavoGSE,
+    ricavoCER: econ.ricavoCER,
+    deduzioneAnnua: noleggio.deduzioneAnnua,
+    costoAnnuoNoleggio: noleggio.costoAnnuoNoleggio,
+  });
   const co2 = co2Evitata({
     producibilitaAnnuaKwh: produzioneAnnuaTotaleKwh,
     carbonOffsetFactorKgPerMwh: quote.roof.carbonOffsetFactorKgPerMwh ?? 350,
@@ -1226,6 +1242,40 @@ function Dashboard({
         <div className="hint" style={{ marginTop: 8 }}>
           Beneficio impianto (€ {econ.beneficioTotale.toLocaleString("it-IT")}, da Sezione C) + deduzione annua da noleggio (€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}).
         </div>
+
+        <div className="cashflow-wrap">
+          <CashFlowTable
+            title="Riepilogo — spesa attuale (bolletta), senza impianto"
+            rows={[{ label: "Bolletta", uscita: flusso.senzaImpianto.uscita }]}
+            saldo={flusso.senzaImpianto.saldo}
+            delta={flusso.senzaImpianto.delta}
+          />
+          <CashFlowTable
+            title={`Flusso di cassa durante il noleggio (${numeroRateNoleggio} rate)`}
+            rows={[
+              { label: "Ricavo GSE", entrata: flusso.duranteNoleggio.ricavoGSE },
+              { label: "Ricavo CER", entrata: flusso.duranteNoleggio.ricavoCER },
+              { label: "Deduzione fiscale noleggio", entrata: flusso.duranteNoleggio.deduzioneAnnua },
+              { label: "Bolletta residua", uscita: flusso.duranteNoleggio.bollettaResidua },
+              { label: "Rata noleggio (annua)", uscita: flusso.duranteNoleggio.costoAnnuoNoleggio },
+            ]}
+            saldo={flusso.duranteNoleggio.saldo}
+            delta={flusso.duranteNoleggio.delta}
+          />
+          <CashFlowTable
+            title="Flusso di cassa dopo il noleggio"
+            rows={[
+              { label: "Ricavo GSE", entrata: flusso.dopoNoleggio.ricavoGSE },
+              { label: "Ricavo CER", entrata: flusso.dopoNoleggio.ricavoCER },
+              { label: "Bolletta residua", uscita: flusso.dopoNoleggio.bollettaResidua },
+            ]}
+            saldo={flusso.dopoNoleggio.saldo}
+            delta={flusso.dopoNoleggio.delta}
+          />
+        </div>
+        <div className="hint" style={{ marginTop: 8 }}>
+          Il &quot;Delta cash flow&quot; indica il guadagno (in verde) o la perdita (in rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
+        </div>
       </section>
 
       <section className="block" id="e">
@@ -1289,6 +1339,7 @@ function Dashboard({
         areaUtileStimataM2={areaUtileStimataM2}
         noleggio={noleggio}
         numeroRateNoleggio={numeroRateNoleggio}
+        flusso={flusso}
       />
     </div>
   );
@@ -1320,6 +1371,7 @@ function PrintReport({
   areaUtileStimataM2,
   noleggio,
   numeroRateNoleggio,
+  flusso,
 }) {
   const oggi = new Date().toLocaleDateString("it-IT");
   const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
@@ -1532,6 +1584,39 @@ function PrintReport({
           Beneficio impianto (€ {econ.beneficioTotale.toLocaleString("it-IT")}, da Sezione B) + deduzione annua da noleggio (€ {noleggio.deduzioneAnnua.toLocaleString("it-IT")}).
         </p>
 
+        <h3 className="pr-h3" style={{ marginTop: 14 }}>Riepilogo flusso di cassa</h3>
+        <PrintCashFlowTable
+          title="Spesa attuale (bolletta) — senza impianto"
+          rows={[{ label: "Bolletta", uscita: flusso.senzaImpianto.uscita }]}
+          saldo={flusso.senzaImpianto.saldo}
+          delta={flusso.senzaImpianto.delta}
+        />
+        <PrintCashFlowTable
+          title={`Durante il noleggio (${numeroRateNoleggio} rate)`}
+          rows={[
+            { label: "Ricavo GSE", entrata: flusso.duranteNoleggio.ricavoGSE },
+            { label: "Ricavo CER", entrata: flusso.duranteNoleggio.ricavoCER },
+            { label: "Deduzione fiscale noleggio", entrata: flusso.duranteNoleggio.deduzioneAnnua },
+            { label: "Bolletta residua", uscita: flusso.duranteNoleggio.bollettaResidua },
+            { label: "Rata noleggio (annua)", uscita: flusso.duranteNoleggio.costoAnnuoNoleggio },
+          ]}
+          saldo={flusso.duranteNoleggio.saldo}
+          delta={flusso.duranteNoleggio.delta}
+        />
+        <PrintCashFlowTable
+          title="Dopo il noleggio"
+          rows={[
+            { label: "Ricavo GSE", entrata: flusso.dopoNoleggio.ricavoGSE },
+            { label: "Ricavo CER", entrata: flusso.dopoNoleggio.ricavoCER },
+            { label: "Bolletta residua", uscita: flusso.dopoNoleggio.bollettaResidua },
+          ]}
+          saldo={flusso.dopoNoleggio.saldo}
+          delta={flusso.dopoNoleggio.delta}
+        />
+        <p className="pr-note">
+          Il &quot;Delta cash flow&quot; indica il guadagno (verde) o la perdita (rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
+        </p>
+
         <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 5</span></div>
       </div>
 
@@ -1641,6 +1726,49 @@ function PrintComboChart({ diurno, notturno, produzione }) {
   );
 }
 
+// Versione a stampa di CashFlowTable (vedi sopra): stessa logica (Saldo e
+// Delta cash flow accorpati su tutte le righe, celle Entrate/Uscite colorate
+// solo quando il valore è presente), ma con classi/colori dedicati al
+// report stampabile (hex fissi, non legati al tema — vedi @media print).
+function PrintCashFlowTable({ title, rows, saldo, delta }) {
+  const deltaGood = delta >= 0;
+  return (
+    <>
+      {title && <div className="pr-cashflow-title">{title}</div>}
+      <table className="pr-cashflow-table">
+        <thead>
+          <tr>
+            <th>Voce</th>
+            <th className="num">Entrate</th>
+            <th className="num">Uscite</th>
+            <th>Saldo</th>
+            <th>Delta cash flow</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.label}>
+              <td className="pr-cf-label">{r.label}</td>
+              <td className={`num pr-cf-entrata ${r.entrata != null ? "has-value" : ""}`}>
+                {r.entrata != null ? `€ ${Math.round(r.entrata).toLocaleString("it-IT")}` : ""}
+              </td>
+              <td className={`num pr-cf-uscita ${r.uscita != null ? "has-value" : ""}`}>
+                {r.uscita != null ? `€ ${Math.round(r.uscita).toLocaleString("it-IT")}` : ""}
+              </td>
+              {i === 0 && (
+                <td className="pr-cf-saldo" rowSpan={rows.length}>{fmtEuroSigned(saldo)}</td>
+              )}
+              {i === 0 && (
+                <td className={`pr-cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSigned(delta)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function Kpi({ label, value, unit, delta, accent, good }) {
   return (
     <div className={`kpi ${accent ? "accent" : ""} ${good ? "good" : ""}`}>
@@ -1679,6 +1807,50 @@ function LegendDot({ color, label }) {
       <span style={{ width: 10, height: 10, borderRadius: 3, background: color, display: "inline-block" }} />
       {label}
     </span>
+  );
+}
+
+// Tabella di riepilogo flusso di cassa (schema a foglio di calcolo: colonne
+// Entrate/Uscite riga per riga, con Saldo e Delta cash flow accorpati su
+// un'unica cella che copre tutte le righe). `rows` è un array di
+// {label, entrata?, uscita?}: la cella entrata/uscita resta bianca quando il
+// valore è assente (null/undefined), colorata quando è un numero (anche 0).
+function CashFlowTable({ title, rows, saldo, delta }) {
+  const deltaGood = delta >= 0;
+  return (
+    <div>
+      {title && <div className="cashflow-title">{title}</div>}
+      <table className="cashflow-table">
+        <thead>
+          <tr>
+            <th>Voce</th>
+            <th className="num">Entrate</th>
+            <th className="num">Uscite</th>
+            <th>Saldo</th>
+            <th>Delta cash flow</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.label}>
+              <td className="cf-label">{r.label}</td>
+              <td className={`num cf-entrata ${r.entrata != null ? "has-value" : ""}`}>
+                {r.entrata != null ? `€ ${Math.round(r.entrata).toLocaleString("it-IT")}` : ""}
+              </td>
+              <td className={`num cf-uscita ${r.uscita != null ? "has-value" : ""}`}>
+                {r.uscita != null ? `€ ${Math.round(r.uscita).toLocaleString("it-IT")}` : ""}
+              </td>
+              {i === 0 && (
+                <td className="cf-saldo" rowSpan={rows.length}>{fmtEuroSigned(saldo)}</td>
+              )}
+              {i === 0 && (
+                <td className={`cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSigned(delta)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
