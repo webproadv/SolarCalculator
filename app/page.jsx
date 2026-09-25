@@ -17,13 +17,6 @@ import {
 
 const RATE_NOLEGGIO_OPTIONS = [84, 72, 60];
 
-// Formatta un importo in euro con il segno "-" prima del simbolo (es. "-€ 560"
-// invece di "€ -560", che è quanto produrrebbe toLocaleString da solo).
-function fmtEuroSigned(v) {
-  const n = Math.round(Number(v) || 0);
-  return n < 0 ? `-€ ${Math.abs(n).toLocaleString("it-IT")}` : `€ ${n.toLocaleString("it-IT")}`;
-}
-
 // --- Esportazione "Prepara Alaska" -----------------------------------------
 // Genera il CSV nel formato richiesto dal partner "Alaska" (noleggio
 // operativo): stessa struttura a 71 colonne del template fornito. Le colonne
@@ -2078,16 +2071,16 @@ function CashFlowTable({ title, rows, saldo, delta }) {
             <tr key={r.label}>
               <td className="cf-label">{r.label}</td>
               <td className={`num cf-entrata ${r.entrata != null ? "has-value" : ""}`}>
-                {r.entrata != null ? `€ ${Math.round(r.entrata).toLocaleString("it-IT")}` : ""}
+                {r.entrata != null ? fmtEuroIt(r.entrata) : ""}
               </td>
               <td className={`num cf-uscita ${r.uscita != null ? "has-value" : ""}`}>
-                {r.uscita != null ? `€ ${Math.round(r.uscita).toLocaleString("it-IT")}` : ""}
+                {r.uscita != null ? fmtEuroIt(r.uscita) : ""}
               </td>
               {i === 0 && (
-                <td className="cf-saldo" rowSpan={rows.length}>{fmtEuroSigned(saldo)}</td>
+                <td className="cf-saldo" rowSpan={rows.length}>{fmtEuroSignedIt(saldo)}</td>
               )}
               {i === 0 && (
-                <td className={`cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSigned(delta)}</td>
+                <td className={`cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSignedIt(delta)}</td>
               )}
             </tr>
           ))}
