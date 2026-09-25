@@ -119,10 +119,10 @@ function buildAlaskaCsvRow({
     "",                                               // Iban
     "",                                               // Sdi
     fmtNumIt(consumoAnnuoKwh, 0),                     // 20 ("CONSUMO TOTALE KW")
-    fmtEuroIt(econ.spesaAnnuaNetta),                  // 21 ("SPESA ANNUA IVA ESCLUSA")
-    fmtEuroIt(econ.prezzoMedio),                      // 22 ("COSTO KW IVA ESCLUSA")
+    fmtNumIt(econ.spesaAnnuaNetta, 2),                // 21 ("SPESA ANNUA IVA ESCLUSA")
+    fmtNumIt(econ.prezzoMedio, 2),                    // 22 ("COSTO KW IVA ESCLUSA")
     fmtNumIt(consumoAnnuoKwh * 25, 0),                // 23 ("CONSUMO KW ANNUI*25")
-    fmtEuroIt(econ.spesaAnnuaNetta * 41.625),         // 24 ("SPESA ANNUA IVA ESCLUSA*41,625")
+    fmtNumIt(econ.spesaAnnuaNetta * 41.625, 2),       // 24 ("SPESA ANNUA IVA ESCLUSA*41,625")
     fmtNumIt(ask.potenzaDisponibile, 1),              // 26 ("POTENZA DISPONIBILE")
     "380",                                             // 27
     ask.fornitore,                                     // 25 ("FORNITORE")
@@ -146,19 +146,19 @@ function buildAlaskaCsvRow({
     fmtNumIt(numeroBatterie, 0),                       // Numero batt ("POTENZA BATTERIE/5")
     "INCLUSO",                                          // accumulo
     "",                                                 // Wall Box
-    fmtEuroIt(costoImpianto),                          // totale ("IMPORTO IMPIANTO")
-    fmtEuroIt(econ.risparmioBolletta),                 // risp net bolletta ("RISPARMIO BOLLETTA")
-    fmtEuroIt(econ.ricavoGSE),                         // ricavi da gse ("RICAVO GSE")
-    fmtEuroIt(econ.ricavoCER),                         // ricavi da cer ("RICAVO CER")
-    fmtEuroIt(noleggio.deduzioneAnnua),                // Vantaggi fiscali ("RISPARMIO DA DEDUZIONE NOLEGGIO")
-    fmtEuroIt(beneficioConNoleggio),                   // Beneficio totale ("RISPARMIO BOLLETTA+GSE+CER+BENEFICIO DEDUZIONE")
-    fmtEuroIt(beneficioConNoleggio / 12),              // Beneficio mensile
+    fmtNumIt(costoImpianto, 2),                        // totale ("IMPORTO IMPIANTO")
+    fmtNumIt(econ.risparmioBolletta, 2),               // risp net bolletta ("RISPARMIO BOLLETTA")
+    fmtNumIt(econ.ricavoGSE, 2),                       // ricavi da gse ("RICAVO GSE")
+    fmtNumIt(econ.ricavoCER, 2),                       // ricavi da cer ("RICAVO CER")
+    fmtNumIt(noleggio.deduzioneAnnua, 2),              // Vantaggi fiscali ("RISPARMIO DA DEDUZIONE NOLEGGIO")
+    fmtNumIt(beneficioConNoleggio, 2),                 // Beneficio totale ("RISPARMIO BOLLETTA+GSE+CER+BENEFICIO DEDUZIONE")
+    fmtNumIt(beneficioConNoleggio / 12, 2),            // Beneficio mensile
     fmtNumIt(numeroRateNoleggio, 0),                   // Anni noleggio ("NUMERO RATE NOLEGGIO")
     fmtNumIt(numeroRateNoleggio / 12, 0),              // numero rate ("NUMERO RATE/12")
-    fmtEuroIt(noleggio.rataMensile),                   // Rata noleggio ("IMPORTO RATA NOLEGGIO")
-    fmtEuroIt(costoImpianto * 0.01 + 350),             // riacquisto ("COSTO IMPIANTO*0,01+350€")
+    fmtNumIt(noleggio.rataMensile, 2),                 // Rata noleggio ("IMPORTO RATA NOLEGGIO")
+    fmtNumIt(costoImpianto * 0.01 + 350, 2),           // riacquisto ("COSTO IMPIANTO*0,01+350€")
     "0,02",                                             // Lcoe
-    fmtEuroIt(beneficioConNoleggio * 20),              // Risparmio 25 anni ("TOTALE BENEFICIO ANNUO CON NOLEGGIO *20")
+    fmtNumIt(beneficioConNoleggio * 20, 2),            // Risparmio 25 anni ("TOTALE BENEFICIO ANNUO CON NOLEGGIO *20")
   ];
 }
 
