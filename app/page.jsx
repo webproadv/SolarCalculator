@@ -50,13 +50,22 @@ const ALASKA_HEADERS = [
   "Rata noleggio", "riacquisto", "Lcoe", "Risparmio 25 anni",
 ];
 
-// Numero con la virgola come separatore decimale (niente separatore delle
-// migliaia, per restare un CSV semplice da reimportare) — coerente con i
-// valori già presenti nel template (es. "1,50%", "0,04").
+// Numero in formato italiano, con il punto come separatore delle migliaia e
+// la virgola per i decimali (es. "12.016,00"). Il campo finisce comunque tra
+// virgolette nel CSV (vedi csvField) perché contiene una virgola, quindi
+// resta un CSV valido nonostante il formato "all'italiana".
 function fmtNumIt(value, decimals = 0) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "";
-  return n.toFixed(decimals).replace(".", ",");
+  // useGrouping va passato esplicitamente: senza, alcune versioni di Node
+  // non raggruppano le migliaia quando i decimali sono forzati (es. "8602,00"
+  // invece di "8.602,00" per un numero di sole 4 cifre intere).
+  return n.toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: true });
+}
+
+// Importo in euro, formato italiano, sempre a 2 decimali (es. "€ 12.016,00").
+function fmtEuroIt(value) {
+  return `€ ${fmtNumIt(value, 2)}`;
 }
 
 // Racchiude tra virgolette (raddoppiando quelle interne) un valore CSV solo
@@ -109,10 +118,10 @@ function buildAlaskaCsvRow({
     "",                                               // Iban
     "",                                               // Sdi
     fmtNumIt(consumoAnnuoKwh, 0),                     // 20 ("CONSUMO TOTALE KW")
-    fmtNumIt(econ.spesaAnnuaNetta, 0),                // 21 ("SPESA ANNUA IVA ESCLUSA")
-    fmtNumIt(econ.prezzoMedio, 3),                    // 22 ("COSTO KW IVA ESCLUSA")
+    fmtEuroIt(econ.spesaAnnuaNetta),                  // 21 ("SPESA ANNUA IVA ESCLUSA")
+    fmtEuroIt(econ.prezzoMedio),                      // 22 ("COSTO KW IVA ESCLUSA")
     fmtNumIt(consumoAnnuoKwh * 25, 0),                // 23 ("CONSUMO KW ANNUI*25")
-    fmtNumIt(econ.spesaAnnuaNetta * 41.625, 0),       // 24 ("SPESA ANNUA IVA ESCLUSA*41,625")
+    fmtEuroIt(econ.spesaAnnuaNetta * 41.625),         // 24 ("SPESA ANNUA IVA ESCLUSA*41,625")
     fmtNumIt(ask.potenzaDisponibile, 1),              // 26 ("POTENZA DISPONIBILE")
     "380",                                             // 27
     ask.fornitore,                                     // 25 ("FORNITORE")
@@ -136,19 +145,19 @@ function buildAlaskaCsvRow({
     fmtNumIt(numeroBatterie, 0),                       // Numero batt ("POTENZA BATTERIE/5")
     "INCLUSO",                                          // accumulo
     "",                                                 // Wall Box
-    fmtNumIt(costoImpianto, 0),                        // totale ("IMPORTO IMPIANTO")
-    fmtNumIt(econ.risparmioBolletta, 0),               // risp net bolletta ("RISPARMIO BOLLETTA")
-    fmtNumIt(econ.ricavoGSE, 0),                       // ricavi da gse ("RICAVO GSE")
-    fmtNumIt(econ.ricavoCER, 0),                       // ricavi da cer ("RICAVO CER")
-    fmtNumIt(noleggio.deduzioneAnnua, 0),              // Vantaggi fiscali ("RISPARMIO DA DEDUZIONE NOLEGGIO")
-    fmtNumIt(beneficioConNoleggio, 0),                 // Beneficio totale ("RISPARMIO BOLLETTA+GSE+CER+BENEFICIO DEDUZIONE")
-    fmtNumIt(beneficioConNoleggio / 12, 0),            // Beneficio mensile
+    fmtEuroIt(costoImpianto),                          // totale ("IMPORTO IMPIANTO")
+    fmtEuroIt(econ.risparmioBolletta),                 // risp net bolletta ("RISPARMIO BOLLETTA")
+    fmtEuroIt(econ.ricavoGSE),                         // ricavi da gse ("RICAVO GSE")
+    fmtEuroIt(econ.ricavoCER),                         // ricavi da cer ("RICAVO CER")
+    fmtEuroIt(noleggio.deduzioneAnnua),                // Vantaggi fiscali ("RISPARMIO DA DEDUZIONE NOLEGGIO")
+    fmtEuroIt(beneficioConNoleggio),                   // Beneficio totale ("RISPARMIO BOLLETTA+GSE+CER+BENEFICIO DEDUZIONE")
+    fmtEuroIt(beneficioConNoleggio / 12),              // Beneficio mensile
     fmtNumIt(numeroRateNoleggio, 0),                   // Anni noleggio ("NUMERO RATE NOLEGGIO")
     fmtNumIt(numeroRateNoleggio / 12, 0),              // numero rate ("NUMERO RATE/12")
-    fmtNumIt(noleggio.rataMensile, 0),                 // Rata noleggio ("IMPORTO RATA NOLEGGIO")
-    fmtNumIt(costoImpianto * 0.01 + 350, 0),           // riacquisto ("COSTO IMPIANTO*0,01+350€")
+    fmtEuroIt(noleggio.rataMensile),                   // Rata noleggio ("IMPORTO RATA NOLEGGIO")
+    fmtEuroIt(costoImpianto * 0.01 + 350),             // riacquisto ("COSTO IMPIANTO*0,01+350€")
     "0,02",                                             // Lcoe
-    fmtNumIt(beneficioConNoleggio * 20, 0),            // Risparmio 25 anni ("TOTALE BENEFICIO ANNUO CON NOLEGGIO *20")
+    fmtEuroIt(beneficioConNoleggio * 20),              // Risparmio 25 anni ("TOTALE BENEFICIO ANNUO CON NOLEGGIO *20")
   ];
 }
 
