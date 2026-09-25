@@ -24,6 +24,154 @@ function fmtEuroSigned(v) {
   return n < 0 ? `-€ ${Math.abs(n).toLocaleString("it-IT")}` : `€ ${n.toLocaleString("it-IT")}`;
 }
 
+// --- Esportazione "Prepara Alaska" -----------------------------------------
+// Genera il CSV nel formato richiesto dal partner "Alaska" (noleggio
+// operativo): stessa struttura a 71 colonne del template fornito. Le colonne
+// letterali (valori fissi già presenti nel template, es. "Dott. Maurizio
+// Galli", le percentuali fisse, i campi lasciati vuoti) restano invariate;
+// le colonne che nel template erano segnaposto tra virgolette (es.
+// "RAGIONE SOCIALE", "SPESA ANNUA IVA ESCLUSA*41,625") vengono calcolate qui
+// dai dati del preventivo, seguendo esattamente l'indicazione scritta nel
+// segnaposto anche quando il nome della colonna del CSV non corrisponde
+// (es. "Anni noleggio" contiene in realtà il numero di rate, non gli anni).
+const ALASKA_HEADERS = [
+  "pdf_otter_filename", "Azienda", "Via0", "Cap len", "Citta Len", "Protocollo",
+  "Fornacette PI data", "Energy Business Account", "Cell", "Ragione sociale",
+  "Referente", "Cellulare1", "Partita iva", "Cod fisc referente", "Cellulare2",
+  "Ind referente", "Ind azienda", "Tel1", "Tel2", "Comune azienda", "Comune ref",
+  "Provincia ref", "Cap ref", "Cap azienda", "Prov azienda", "Mail azienda",
+  "Mail referente", "Pec", "Iban", "Sdi", "20", "21", "22", "23", "24", "26",
+  "27", "25", "ee1", "ee3", "ee5", "ee2", "Rit dedic", "Potenza proposta",
+  "Produzione media annua", "Autoconsumo", "Kg co2", "Alberi", "numero moduli",
+  "inverter", "kit reverse", "fissaggio", "cavi", "Tot accumulo",
+  "capacita batterie", "Numero batt", "accumulo", "Wall Box", "totale",
+  "risp net bolletta", "ricavi da gse", "ricavi da cer", "Vantaggi fiscali",
+  "Beneficio totale", "Beneficio mensile", "Anni noleggio", "numero rate",
+  "Rata noleggio", "riacquisto", "Lcoe", "Risparmio 25 anni",
+];
+
+// Numero con la virgola come separatore decimale (niente separatore delle
+// migliaia, per restare un CSV semplice da reimportare) — coerente con i
+// valori già presenti nel template (es. "1,50%", "0,04").
+function fmtNumIt(value, decimals = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toFixed(decimals).replace(".", ",");
+}
+
+// Racchiude tra virgolette (raddoppiando quelle interne) un valore CSV solo
+// se contiene la virgola, un a-capo o una virgoletta — esattamente come fa
+// il template originale per i numeri in formato italiano.
+function csvField(value) {
+  const s = value === null || value === undefined ? "" : String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function buildAlaskaCsvRow({
+  company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
+  costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati, ask,
+}) {
+  const oggi = new Date().toLocaleDateString("it-IT");
+  const consumoAnnuoKwh = quote.input.consumoAnnuoKwh || 0;
+  const kgCo2 = produzioneAnnuaTotaleKwh * 0.535;
+  const numeroBatterie = batteriaKwh > 0 ? Math.ceil(batteriaKwh / 5) : 0;
+  const beneficioConNoleggio = noleggio.beneficioTotaleConNoleggio;
+
+  return [
+    "Analisi energetica",                          // pdf_otter_filename
+    company.ragioneSociale,                        // Azienda ("RAGIONE SOCIALE")
+    company.indirizzo,                              // Via0 ("INDIRIZZO")
+    company.cap,                                     // Cap len ("CAP")
+    company.comune,                                  // Citta Len ("CITTA")
+    "",                                               // Protocollo
+    oggi,                                             // Fornacette PI data ("DATA ATTUALE")
+    "Dott. Maurizio Galli",                          // Energy Business Account
+    "+39 3391860201",                                // Cell
+    company.ragioneSociale,                          // Ragione sociale ("RAGIONE SOCIALE")
+    ask.referente,                                    // Referente ("REFERENTE")
+    ask.cellulare,                                    // Cellulare1 ("CELLULARE")
+    company.piva,                                     // Partita iva ("PARTITA IVA")
+    "",                                               // Cod fisc referente
+    ask.cellulare,                                    // Cellulare2 ("CELLULARE")
+    company.indirizzo,                                // Ind referente ("INDIRIZZO")
+    company.indirizzo,                                // Ind azienda ("INDIRIZZO")
+    "",                                               // Tel1
+    "",                                               // Tel2
+    company.comune,                                   // Comune azienda ("COMUNE")
+    company.comune,                                   // Comune ref ("COMUNE")
+    company.provincia,                                // Provincia ref ("PROVINCIA")
+    company.cap,                                      // Cap ref ("CAP")
+    company.cap,                                      // Cap azienda ("CAP")
+    company.provincia,                                // Prov azienda ("PROVINCIA")
+    ask.email,                                        // Mail azienda ("MAIL")
+    ask.email,                                        // Mail referente ("MAIL")
+    "",                                               // Pec (nessuna fonte disponibile)
+    "",                                               // Iban
+    "",                                               // Sdi
+    fmtNumIt(consumoAnnuoKwh, 0),                     // 20 ("CONSUMO TOTALE KW")
+    fmtNumIt(econ.spesaAnnuaNetta, 0),                // 21 ("SPESA ANNUA IVA ESCLUSA")
+    fmtNumIt(econ.prezzoMedio, 3),                    // 22 ("COSTO KW IVA ESCLUSA")
+    fmtNumIt(consumoAnnuoKwh * 25, 0),                // 23 ("CONSUMO KW ANNUI*25")
+    fmtNumIt(econ.spesaAnnuaNetta * 41.625, 0),       // 24 ("SPESA ANNUA IVA ESCLUSA*41,625")
+    fmtNumIt(ask.potenzaDisponibile, 1),              // 26 ("POTENZA DISPONIBILE")
+    "380",                                             // 27
+    ask.fornitore,                                     // 25 ("FORNITORE")
+    fmtNumIt(quote.input.giorniLavorativi, 0),        // ee1 ("GIORNI LAVORATIVI")
+    "4%",                                              // ee3
+    "1,50%",                                           // ee5
+    "0,1",                                             // ee2
+    "0,04",                                            // Rit dedic
+    fmtNumIt(kwp, 2),                                  // Potenza proposta ("POTENZA IMPIANTO PROPOSTA")
+    fmtNumIt(produzioneAnnuaTotaleKwh, 0),            // Produzione media annua ("PRODUZIONE ANNUA IMPIANTO")
+    `${fmtNumIt(autoconsumoPct, 1)}%`,                 // Autoconsumo ("AUTOCONSUMO")
+    fmtNumIt(kgCo2, 0),                                // Kg co2 ("PRODUZIONE ANNUA IMPIANTO *0,535")
+    fmtNumIt(kgCo2 / 30, 0),                           // Alberi ("PRODUZIONE ANNUA IMPIANTO *0,535/30")
+    fmtNumIt(pannelliStimati, 0),                      // numero moduli ("NUMERO PANNELLI DA INSTALLARE")
+    "1",                                                // inverter
+    "INCLUSO",                                          // kit reverse
+    "A CORPO",                                          // fissaggio
+    "A CORPO",                                          // cavi
+    fmtNumIt(batteriaKwh, 0),                          // Tot accumulo ("ACCUMULO DA INSTALLARE KW")
+    "5",                                                // capacita batterie
+    fmtNumIt(numeroBatterie, 0),                       // Numero batt ("POTENZA BATTERIE/5")
+    "INCLUSO",                                          // accumulo
+    "",                                                 // Wall Box
+    fmtNumIt(costoImpianto, 0),                        // totale ("IMPORTO IMPIANTO")
+    fmtNumIt(econ.risparmioBolletta, 0),               // risp net bolletta ("RISPARMIO BOLLETTA")
+    fmtNumIt(econ.ricavoGSE, 0),                       // ricavi da gse ("RICAVO GSE")
+    fmtNumIt(econ.ricavoCER, 0),                       // ricavi da cer ("RICAVO CER")
+    fmtNumIt(noleggio.deduzioneAnnua, 0),              // Vantaggi fiscali ("RISPARMIO DA DEDUZIONE NOLEGGIO")
+    fmtNumIt(beneficioConNoleggio, 0),                 // Beneficio totale ("RISPARMIO BOLLETTA+GSE+CER+BENEFICIO DEDUZIONE")
+    fmtNumIt(beneficioConNoleggio / 12, 0),            // Beneficio mensile
+    fmtNumIt(numeroRateNoleggio, 0),                   // Anni noleggio ("NUMERO RATE NOLEGGIO")
+    fmtNumIt(numeroRateNoleggio / 12, 0),              // numero rate ("NUMERO RATE/12")
+    fmtNumIt(noleggio.rataMensile, 0),                 // Rata noleggio ("IMPORTO RATA NOLEGGIO")
+    fmtNumIt(costoImpianto * 0.01 + 350, 0),           // riacquisto ("COSTO IMPIANTO*0,01+350€")
+    "0,02",                                             // Lcoe
+    fmtNumIt(beneficioConNoleggio * 20, 0),            // Risparmio 25 anni ("TOTALE BENEFICIO ANNUO CON NOLEGGIO *20")
+  ];
+}
+
+function buildAlaskaCsv(data) {
+  const row = buildAlaskaCsvRow(data);
+  const lines = [ALASKA_HEADERS, row].map((cols) => cols.map(csvField).join(","));
+  return "﻿" + lines.join("\r\n") + "\r\n";
+}
+
+function downloadAlaskaCsv(data) {
+  const csv = buildAlaskaCsv(data);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const nomeFile = (data.company.ragioneSociale || "azienda").trim().replace(/[^a-z0-9]+/gi, "_");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Alaska_${nomeFile}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 const STEPS = ["Azienda", "Consumi", "Risultati"];
 
 const MESI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -869,6 +1017,36 @@ function Dashboard({
     RATE_NOLEGGIO_OPTIONS.includes(Number(initialNumeroRateNoleggio)) ? Number(initialNumeroRateNoleggio) : 84
   );
 
+  // Esportazione CSV per il partner "Alaska" (vedi buildAlaskaCsv): prima
+  // di generare il file chiediamo i pochi campi che l'app non raccoglie
+  // altrove (referente, cellulare, email, potenza disponibile, fornitore
+  // attuale) — tutto il resto viene calcolato dai dati già presenti nel
+  // preventivo.
+  const [showAlaskaModal, setShowAlaskaModal] = useState(false);
+  const [alaskaForm, setAlaskaForm] = useState({
+    referente: "", cellulare: "", email: "", potenzaDisponibile: "", fornitore: "",
+  });
+  const [alaskaError, setAlaskaError] = useState("");
+
+  function updateAlaskaField(key, value) {
+    setAlaskaForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function confermaAlaska() {
+    const { referente, cellulare, email, potenzaDisponibile, fornitore } = alaskaForm;
+    if (!referente.trim() || !cellulare.trim() || !email.trim() || !potenzaDisponibile || !fornitore.trim()) {
+      setAlaskaError("Compila tutti i campi prima di generare il CSV.");
+      return;
+    }
+    downloadAlaskaCsv({
+      company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
+      costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
+      ask: alaskaForm,
+    });
+    setAlaskaError("");
+    setShowAlaskaModal(false);
+  }
+
   // Salvataggio su Supabase (tabella `progetti`): ogni salvataggio crea un
   // nuovo snapshot con i valori attuali di impianto/accumulo/costo proposti.
   const [saveState, setSaveState] = useState({ status: "idle", message: "" });
@@ -970,10 +1148,47 @@ function Dashboard({
           💾 Salva progetto
         </button>
         <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
+        <button className="btn btn-ghost" onClick={() => { setAlaskaError(""); setShowAlaskaModal(true); }}>📤 PREPARA ALASKA</button>
         <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
       </div>
+
+      {showAlaskaModal && (
+        <div className="modal-overlay" onClick={() => setShowAlaskaModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Prepara CSV Alaska</h3>
+            <p className="modal-desc">
+              Questi dati non sono raccolti altrove nel preventivo: servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}.
+            </p>
+            <div className="field">
+              <label>Nome referente</label>
+              <input type="text" value={alaskaForm.referente} onChange={(e) => updateAlaskaField("referente", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Cellulare</label>
+              <input type="text" value={alaskaForm.cellulare} onChange={(e) => updateAlaskaField("cellulare", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input type="email" value={alaskaForm.email} onChange={(e) => updateAlaskaField("email", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Potenza disponibile (kW)</label>
+              <input type="number" step="0.1" value={alaskaForm.potenzaDisponibile} onChange={(e) => updateAlaskaField("potenzaDisponibile", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Fornitore attuale</label>
+              <input type="text" value={alaskaForm.fornitore} onChange={(e) => updateAlaskaField("fornitore", e.target.value)} />
+            </div>
+            {alaskaError && <div className="save-feedback error" style={{ marginBottom: 12 }}>{alaskaError}</div>}
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setShowAlaskaModal(false)}>Annulla</button>
+              <button className="btn btn-primary" onClick={confermaAlaska}>Genera CSV</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="header">
         <div className="company-card">
