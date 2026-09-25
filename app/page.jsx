@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
+import SatellitePreviewMap from "./SatellitePreviewMap";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -285,6 +286,19 @@ export default function Page() {
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState("");
 
+  // Inquadratura scelta a mano dall'utente nell'anteprima satellitare dello
+  // step Azienda (SatellitePreviewMap): { lat, lng, zoom } dell'ultima vista
+  // vista dall'utente, oppure null se non ancora disponibile (mappa non
+  // ancora caricata, token Mapbox non configurato, o nessuna ricerca
+  // azienda ancora effettuata in questa sessione). Quando presente, ha la
+  // precedenza sul calcolo automatico dello zoom in fetchRoofImagesAuto.
+  const [satView, setSatView] = useState(null);
+  // Incrementata per forzare un rimontaggio "pulito" di SatellitePreviewMap
+  // (vedi key={satMapKey} più sotto): dopo una nuova ricerca Partita IVA, o
+  // quando l'utente preme "Ricentra su indirizzo" dopo aver corretto
+  // lat/lng a mano.
+  const [satMapKey, setSatMapKey] = useState(0);
+
   // Step 2 — bolletta / fasce / consumo totale / spesa / produzione FV / giorni lavorativi
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrNote, setOcrNote] = useState("");
@@ -342,6 +356,8 @@ export default function Page() {
       if (!r.ok) throw new Error(data.error || "Errore nel caricamento del progetto salvato.");
       const saved = data.dati || {};
       if (saved.company) setCompany(saved.company);
+      setSatView(null);
+      setSatMapKey((k) => k + 1);
       if (saved.quote) setQuote(saved.quote);
       if (saved.monthly) setMonthly(saved.monthly);
       if (saved.bollettaMode) setBollettaMode(saved.bollettaMode);
@@ -382,6 +398,10 @@ export default function Page() {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nella ricerca azienda.");
       setCompany(data);
+      // Nuova azienda: riparte da un'inquadratura satellitare pulita invece
+      // di tenere quella (eventuale) dell'azienda cercata in precedenza.
+      setSatView(null);
+      setSatMapKey((k) => k + 1);
     } catch (err) {
       setCompanyError(err.message);
     } finally {
@@ -391,6 +411,15 @@ export default function Page() {
 
   function updateCompanyField(key, value) {
     setCompany((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Bottone "Ricentra su indirizzo" nell'anteprima satellitare: rimonta la
+  // mappa sulle coordinate attuali (utile dopo aver corretto lat/lng a
+  // mano). Non risponde automaticamente ad ogni modifica dei campi
+  // lat/lng — vedi il commento in SatellitePreviewMap.jsx sul perché.
+  function ricentraSatPreview() {
+    setSatView(null);
+    setSatMapKey((k) => k + 1);
   }
 
   // Modifica manuale della spesa annua: come per la tabella mensile (vedi
@@ -521,7 +550,13 @@ export default function Page() {
   // nessuna azione richiesta all'utente. Non serve un rilievo del tetto
   // disponibile: basta la posizione dell'azienda, quindi la generiamo anche
   // quando buildingInsights non ha dati per l'indirizzo (roofDataUnavailable).
-  async function fetchRoofImagesAuto(quoteData, companyData) {
+  //
+  // Se l'utente ha inquadrato l'anteprima nello step Azienda
+  // (SatellitePreviewMap → satView), quella vista (centratura + zoom) ha la
+  // precedenza sul calcolo automatico dello zoom dall'area del tetto: è
+  // esplicitamente quello che ha scelto di vedere nella schermata dei
+  // calcoli e nel PDF.
+  async function fetchRoofImagesAuto(quoteData, companyData, manualView) {
     if (quoteData?.demo) return;
     setRoofImagesError("");
     setRoofImagesLoading(true);
@@ -530,8 +565,9 @@ export default function Page() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          lat: companyData.lat,
-          lng: companyData.lng,
+          lat: manualView?.lat ?? companyData.lat,
+          lng: manualView?.lng ?? companyData.lng,
+          zoom: manualView?.zoom, // assente: /api/roof-image calcola lo zoom dall'area del tetto
           segments: quoteData.roof?.segments || [],
         }),
       });
@@ -584,7 +620,7 @@ export default function Page() {
       setQuote(data);
       setStep(2);
       // Non blocca il passaggio alla dashboard: le foto arrivano appena pronte.
-      fetchRoofImagesAuto(data, company);
+      fetchRoofImagesAuto(data, company, satView);
     } catch (err) {
       setQuoteError(err.message);
     } finally {
@@ -719,6 +755,20 @@ export default function Page() {
                     </div>
                   </div>
                   <p className="hint">La sede legale non sempre coincide con il capannone su cui installare i pannelli: correggi indirizzo e coordinate se necessario.</p>
+
+                  <div className="field" style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+                      <label style={{ marginBottom: 0 }}>Anteprima foto satellitare</label>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={ricentraSatPreview}>
+                        ↺ Ricentra su indirizzo
+                      </button>
+                    </div>
+                    <p className="hint" style={{ marginTop: 2, marginBottom: 8 }}>
+                      Trascina per spostare l&apos;inquadratura e usa +/− per lo zoom: verrà usata questa stessa vista per generare la foto satellitare nella schermata dei calcoli e nel PDF.
+                    </p>
+                    <SatellitePreviewMap key={satMapKey} lat={company.lat} lng={company.lng} onViewChange={setSatView} />
+                  </div>
+
                   <div className="btn-row">
                     <span />
                     <button className="btn btn-primary" onClick={() => setStep(1)}>

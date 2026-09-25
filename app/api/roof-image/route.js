@@ -16,16 +16,18 @@ import { fetchRoofImages } from "../../../lib/sources";
 // {
 //   lat, lng,
 //   segments,       // quote.roof.segments — solo per dimensionare il raggio della richiesta
+//   zoom,           // opzionale: inquadratura scelta a mano dall'utente (SatellitePreviewMap,
+//                   // step Azienda) — se presente, sostituisce il calcolo automatico dello zoom
 // }
 export async function POST(req) {
-  const { lat, lng, segments } = await req.json();
+  const { lat, lng, segments, zoom } = await req.json();
 
   if (typeof lat !== "number" || typeof lng !== "number") {
     return NextResponse.json({ error: "Coordinate mancanti o non valide." }, { status: 400 });
   }
 
   try {
-    const images = await fetchRoofImages(lat, lng, { segments });
+    const images = await fetchRoofImages(lat, lng, { segments, zoom });
     return NextResponse.json(images);
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 502 });
