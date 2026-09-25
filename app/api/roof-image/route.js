@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import { fetchRoofImages } from "../../../lib/sources";
 
-// Genera la foto aerea satellitare del sito a partire dal layer RGB della
-// Google Solar API (dataLayers).
+// Genera la foto aerea del sito tramite la Google Maps Static API (vista
+// satellitare, centrata sulle coordinate dell'azienda).
 //
-// Endpoint separato da /api/quote e pensato per essere chiamato solo su
-// azione esplicita dell'utente (bottone in dashboard): la richiesta
-// dataLayers è nel livello di prezzo "Enterprise" della Solar API, più caro
-// della sola buildingInsights già usata per calcolare il preventivo — non va
-// quindi eseguita automaticamente ad ogni preventivo generato.
+// Endpoint separato da /api/quote (chiamato subito dopo, non appena il
+// preventivo è pronto — vedi fetchRoofImagesAuto in app/page.jsx): così un
+// eventuale errore o lentezza nel recupero della foto non blocca la
+// generazione del preventivo stesso.
 //
 // body atteso:
 // {

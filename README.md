@@ -22,7 +22,7 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 
 | Variabile | Serve per | Senza di essa |
 |---|---|---|
-| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights) **e** geocodifica indirizzo→lat/lng (Google Geocoding API, stessa chiave: va abilitata anche questa API sul progetto) | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
+| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights), geocodifica indirizzo→lat/lng (Google Geocoding API) **e** foto satellitare del sito (Google Maps Static API) — stessa chiave: vanno abilitate tutte e tre le API sul progetto | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
 | `APIFY_API_TOKEN` | Lookup ragione sociale/indirizzo da Partita IVA tramite l'actor Apify `dltik/italy-company-registry-scraper` (Registro Imprese/VIES) — fonte preferita | Se assente, si usa `OPENAPI_KEY` come alternativa |
 | `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
@@ -52,18 +52,15 @@ Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva proge
 
 Lo schema del database si trova in `supabase/migrations/` (compatibile con l'integrazione GitHub di Supabase per la sincronizzazione automatica delle migrazioni: se collegata, basta un push su `main` per applicarlo; in alternativa va incollato manualmente nello SQL editor di Supabase).
 
-## Foto satellitare e simulazione pannelli sul tetto
+## Foto satellitare del sito
 
-Appena la dashboard è pronta, l'app genera **automaticamente** (nessun bottone da premere) due immagini a partire dallo stesso layer RGB:
+Appena la dashboard è pronta, l'app genera **automaticamente** (nessun bottone da premere) una foto aerea del sito, centrata sulle coordinate dell'azienda — mostrata sia in alto in dashboard (riquadro anagrafica azienda) sia nella sezione A ("Producibilità fotovoltaica") sia nel PDF stampabile.
 
-1. la foto aerea "pulita" del sito — mostrata una sola volta, in alto in dashboard (riquadro anagrafica azienda);
-2. la stessa foto con sovrimpressi i pannelli dell'impianto proposto (in verde, i primi N per producibilità, N = pannelli stimati dall'impianto suggerito al momento del calcolo) e il resto del layout massimo installabile come riferimento (in grigio) — mostrata nella sezione A ("Producibilità fotovoltaica"). Se l'utente modifica in seguito il campo "Impianto proposto" in dashboard, questa simulazione fotografica non si rigenera automaticamente (il numero di pannelli evidenziati resta quello del valore suggerito iniziale).
+La foto viene presa dalla **Google Maps Static API** (vista satellitare, endpoint `/api/roof-image`), non più dal layer RGB della Google Solar API: quella richiesta (`dataLayers.get`) è nel livello di prezzo "Enterprise", disponibile solo dove Google ha fatto un rilievo dettagliato dell'edificio, e falliva spesso ("nessun layer RGB disponibile") anche per indirizzi normalmente coperti da Google Maps. La Maps Static API ha invece copertura satellitare pressoché ovunque, quindi la foto viene generata anche quando `buildingInsights` non ha un rilievo del tetto per l'indirizzo (`roofDataUnavailable`).
 
-Entrambe derivano dal layer RGB della Google Solar API (`dataLayers.get`, endpoint `/api/roof-image`) e dalla lista pannelli di `buildingInsights` (`quote.roof.solarPanels`) già usata per il dimensionamento — nessuna nuova API da configurare, serve solo `GOOGLE_SOLAR_API_KEY` (la stessa già usata per `/api/solar` e `/api/quote`).
+Usa la stessa chiave già configurata — serve solo `GOOGLE_SOLAR_API_KEY` (va abilitata anche la **Maps Static API** sullo stesso progetto, oltre a Solar API e Geocoding API). Nota: una versione precedente disegnava anche i singoli pannelli sovrapposti alla foto; è stata rimossa perché l'allineamento non era affidabile su tutti i siti — la superficie utile per i pannelli si stima dai dati aggregati di `buildingInsights` (area massima/numero pannelli), mostrati in sezione A, non da un disegno pixel-per-pixel.
 
-**Nota costi:** a differenza di `buildingInsights` (livello di prezzo "Essentials"), `dataLayers` è nel livello "Enterprise", più caro. Essendo generata automaticamente ad ogni preventivo (non più su richiesta esplicita), viene chiamata una volta per ogni preventivo generato con dati reali (non demo). Verificare il prezzo aggiornato per SKU nella console Google Cloud del progetto prima di un uso in produzione su volumi alti, ed eventualmente impostare un quota/budget cap giornaliero sul progetto.
-
-Se la copertura satellitare Solar API per il sito non è disponibile o di qualità sufficiente, la generazione può fallire (errore mostrato in dashboard, con fallback allo schema tetto disegnato); il resto del preventivo (numeri, dimensionamento, economics) non ne risente, perché la generazione immagini è indipendente da `/api/quote`.
+Se la generazione fallisce comunque (errore di rete, chiave senza Maps Static API abilitata, ecc.), l'errore è mostrato in dashboard con fallback allo schema tetto disegnato; il resto del preventivo (numeri, dimensionamento, economics) non ne risente, perché la generazione immagine è indipendente da `/api/quote`.
 
 ## Calcolo di produzione, dimensionamento e fabbisogno diurno/notturno
 
@@ -100,12 +97,12 @@ npm run dev
 ## Limiti noti (MVP)
 
 - Ogni "Salva progetto" crea una nuova riga in `progetti` (nessun "aggiorna" esplicito su un progetto esistente): utile come storico automatico delle revisioni per uno stesso cliente, ma l'elenco può accumulare più salvataggi dello stesso preventivo.
-- Aprendo un progetto salvato da "I miei progetti", la foto satellitare e la simulazione pannelli non vengono rigenerate automaticamente (per non consumare quota Google Solar API ad ogni apertura): va rigenerato un nuovo preventivo per averle.
+- Aprendo un progetto salvato da "I miei progetti", la foto satellitare non viene rigenerata automaticamente (per non consumare quota Google Maps ad ogni apertura): va rigenerato un nuovo preventivo per averla.
 - L'archivio progetti è condiviso tra tutti gli utenti autorizzati (non è diviso per singolo utente): adatto a un piccolo team che lavora sugli stessi clienti.
 - Nessuna generazione PDF del preventivo (previsto in seguito: i dati necessari sono già salvati per intero nella colonna `dati` di `progetti`).
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).
-- Il conteggio pannelli e la superficie utile restano stime aggregate (modulo da 505 Wp, ≈4,1 m²/kWp); la simulazione fotografica del layout (vedi sopra) usa le posizioni candidate calcolate dall&apos;algoritmo di Google, non un progetto elettrico/strutturale reale del tetto.
-- La scheda con la geometria di dettaglio dei segmenti di tetto (aree, pitch, azimuth) non è più mostrata in dashboard: resta usata solo internamente per la foto satellitare e la simulazione pannelli.
+- Il conteggio pannelli e la superficie utile restano stime aggregate (modulo da 505 Wp, ≈4,1 m²/kWp) dai dati di `buildingInsights`, non un progetto elettrico/strutturale reale del tetto.
+- La scheda con la geometria di dettaglio dei segmenti di tetto (aree, pitch, azimuth) non è più mostrata in dashboard: resta usata solo internamente per dimensionare l'inquadratura della foto satellitare.
 - In modalità "foto bolletta", la lettura automatica di consumo annuo e spesa annua dipende da quanto è effettivamente leggibile nella foto caricata (molte bollette non riportano un totale annuo esplicito): quando non rilevabili, questi due campi vanno inseriti a mano nella stessa schermata.
 - Il grafico combinato mensile consumi/produzione usa, in modalità "foto bolletta", un consumo distribuito in parti uguali sui 12 mesi (nessuna stagionalità): è un'approssimazione dichiarata in dashboard, non un profilo di carico reale. In modalità manuale il grafico riflette invece i valori mensili realmente inseriti.
 - La produzione annua specifica (kWh/kWp) è un dato inserito manualmente: la sua accuratezza dipende interamente dalla fonte usata dal commerciale (PVGIS, un altro tool, o una stima) al momento dell'inserimento.

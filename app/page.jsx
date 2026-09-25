@@ -523,11 +523,14 @@ export default function Page() {
     }
   }
 
-  // Foto satellitare del sito (Google Solar API dataLayers): generata
-  // automaticamente non appena è pronto un preventivo reale (non demo) con
-  // un rilievo del tetto disponibile — nessuna azione richiesta all'utente.
+  // Foto satellitare del sito (Google Maps Static API): generata
+  // automaticamente non appena è pronto un preventivo reale (non demo) —
+  // nessuna azione richiesta all'utente. A differenza della vecchia foto presa
+  // dal layer RGB della Solar API, non serve un rilievo del tetto disponibile:
+  // basta la posizione dell'azienda, quindi la generiamo anche quando
+  // buildingInsights non ha dati per l'indirizzo (roofDataUnavailable).
   async function fetchRoofImagesAuto(quoteData, companyData) {
-    if (quoteData?.demo || quoteData?.roofDataUnavailable || !quoteData?.roof?.segments?.length) return;
+    if (quoteData?.demo) return;
     setRoofImagesError("");
     setRoofImagesLoading(true);
     try {
@@ -537,7 +540,7 @@ export default function Page() {
         body: JSON.stringify({
           lat: companyData.lat,
           lng: companyData.lng,
-          segments: quoteData.roof.segments,
+          segments: quoteData.roof?.segments || [],
         }),
       });
       const data = await r.json();
@@ -1272,7 +1275,7 @@ function Dashboard({
         <div className="grid-2" style={{ marginTop: 20 }}>
           <div className="card">
             <h3>Foto satellitare del sito</h3>
-            <div className="card-note">Rilievo aereo dell'edificio, generato automaticamente dal layer RGB della Google Solar API.</div>
+            <div className="card-note">Foto satellitare del sito, generata automaticamente da Google Maps.</div>
             <div style={{ marginTop: 12 }}>
               {roofImages ? (
                 <img src={roofImages.satelliteImageUrl} alt="Foto aerea satellitare del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
@@ -1282,8 +1285,6 @@ function Dashboard({
                 <div className="card-note">
                   Non disponibile: {quote.demo
                     ? "questa istanza è in modalità demo (manca GOOGLE_SOLAR_API_KEY)."
-                    : quote.roofDataUnavailable
-                    ? "nessun rilievo satellitare Google per questo indirizzo."
                     : "in generazione o non riuscita — vedi eventuale messaggio sotto."}
                 </div>
               )}
@@ -1662,7 +1663,7 @@ function PrintReport({
 
         <div className="pr-cols-2" style={{ marginTop: 18 }}>
           <div>
-            <p className="pr-note" style={{ marginTop: 0 }}>Rilievo aereo del sito (Google Solar API)</p>
+            <p className="pr-note" style={{ marginTop: 0 }}>Foto satellitare del sito (Google Maps)</p>
             {roofImages?.satelliteImageUrl ? (
               <img src={roofImages.satelliteImageUrl} alt="Foto satellitare del sito" className="pr-photo" />
             ) : (
