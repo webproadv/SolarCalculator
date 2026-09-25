@@ -254,15 +254,27 @@ export default function Page() {
           Array.isArray(data.monthly_kwh) && data.monthly_kwh.length === 12 && data.monthly_kwh.every((v) => typeof v === "number" && v >= 0);
         const haveTotaleAnnuo = typeof data.consumo_annuo_kwh === "number" && data.consumo_annuo_kwh > 0;
 
+        // Dettaglio F1/F2/F3 letto da una vera tabella mese per mese (es.
+        // colonne Mese|F1|F2|F3): dato reale e più preciso di una singola
+        // percentuale complessiva applicata a tutti i mesi allo stesso modo.
+        const monthlyDetail = data.monthly_detail;
+        const haveMonthlyDetail =
+          Array.isArray(monthlyDetail) &&
+          monthlyDetail.length === 12 &&
+          monthlyDetail.some((m) => m && typeof m.f1 === "number" && typeof m.f2 === "number" && typeof m.f3 === "number");
+        const monthlyDetailCount = haveMonthlyDetail ? monthlyDetail.filter(Boolean).length : 0;
+
         if (haveMonthlyTrend) {
           setOcrMonthlyKwh(data.monthly_kwh);
         }
 
-        // Totale kWh per ciascuno dei 12 mesi: se la bolletta riportava un
-        // grafico "andamento consumi" mese per mese lo usiamo direttamente
-        // (è un dato reale); altrimenti, se è noto solo il consumo annuo,
-        // lo distribuiamo con la stagionalità tipica CONSUMO_MONTHLY_SHAPE_FALLBACK
-        // (una stima dichiarata come tale, non un dato letto).
+        // Totale kWh per ciascuno dei 12 mesi: usato solo per i mesi non
+        // coperti da un dettaglio F1/F2/F3 diretto (vedi sotto). Se la
+        // bolletta riportava un grafico "andamento consumi" mese per mese lo
+        // usiamo direttamente (è un dato reale); altrimenti, se è noto solo
+        // il consumo annuo, lo distribuiamo con la stagionalità tipica
+        // CONSUMO_MONTHLY_SHAPE_FALLBACK (una stima dichiarata come tale,
+        // non un dato letto).
         let totaliPerMese = null;
         if (haveMonthlyTrend) {
           totaliPerMese = data.monthly_kwh;
@@ -270,23 +282,41 @@ export default function Page() {
           totaliPerMese = applyMonthlyShape(Math.round(data.consumo_annuo_kwh), CONSUMO_MONTHLY_SHAPE_FALLBACK);
         }
 
-        // La tabella mensile F1/F2/F3 si può precompilare solo avendo sia un
-        // totale mese per mese (reale o stimato) sia le percentuali di
-        // fascia lette dal grafico a torta della bolletta: la ripartizione
-        // per fascia si applica identica a ogni mese. Se manca uno dei due,
-        // la tabella resta vuota e l'utente la compila/verifica a mano.
-        if (totaliPerMese && havePct) {
-          const p1 = Math.round(data.f1_pct);
-          const p2 = Math.round(data.f2_pct);
-          const nuovoMonthly = totaliPerMese.map((totRaw) => {
-            const tot = Math.round(totRaw);
-            const f1 = Math.round((p1 / 100) * tot);
-            const f2 = Math.round((p2 / 100) * tot);
-            const f3 = Math.max(0, tot - f1 - f2);
-            return { f1: String(f1), f2: String(f2), f3: String(f3) };
+        // Priorità di lettura per la tabella F1/F2/F3 mese per mese:
+        // 1) il dettaglio letto direttamente da una tabella Mese|F1|F2|F3
+        //    (dato reale, il più preciso possibile);
+        // 2) per i mesi non coperti dal dettaglio, il totale di quel mese
+        //    (reale o stimato) ripartito secondo le percentuali complessive
+        //    di fascia lette da un grafico a torta.
+        if (haveMonthlyDetail || (totaliPerMese && havePct)) {
+          const p1 = havePct ? Math.round(data.f1_pct) : null;
+          const p2 = havePct ? Math.round(data.f2_pct) : null;
+          const nuovoMonthly = MESI.map((_, i) => {
+            const det = haveMonthlyDetail ? monthlyDetail[i] : null;
+            if (det && typeof det.f1 === "number" && typeof det.f2 === "number" && typeof det.f3 === "number") {
+              return { f1: String(Math.round(det.f1)), f2: String(Math.round(det.f2)), f3: String(Math.round(det.f3)) };
+            }
+            if (totaliPerMese && havePct) {
+              const tot = Math.round(totaliPerMese[i]);
+              const f1 = Math.round((p1 / 100) * tot);
+              const f2 = Math.round((p2 / 100) * tot);
+              const f3 = Math.max(0, tot - f1 - f2);
+              return { f1: String(f1), f2: String(f2), f3: String(f3) };
+            }
+            return { f1: "", f2: "", f3: "" };
           });
           setMonthly(nuovoMonthly);
-          letti.push(haveMonthlyTrend ? "andamento mensile e ripartizione F1/F2/F3" : "consumo annuo (distribuito sui 12 mesi) e ripartizione F1/F2/F3");
+
+          if (haveMonthlyDetail && monthlyDetailCount === 12) {
+            letti.push("dettaglio F1/F2/F3 mese per mese");
+          } else if (haveMonthlyDetail) {
+            letti.push(
+              `dettaglio F1/F2/F3 per ${monthlyDetailCount} mesi` +
+                (totaliPerMese && havePct ? " (gli altri mesi stimati dalla ripartizione percentuale complessiva)" : " (completa tu gli altri mesi in tabella)")
+            );
+          } else {
+            letti.push(haveMonthlyTrend ? "andamento mensile e ripartizione F1/F2/F3" : "consumo annuo (distribuito sui 12 mesi) e ripartizione F1/F2/F3");
+          }
         } else if (totaliPerMese) {
           letti.push(
             haveMonthlyTrend
