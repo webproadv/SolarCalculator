@@ -13,27 +13,33 @@ import sharp from "sharp";
 // - L'output è vincolato con un tool JSON-schema (tool_choice forzato)
 //   invece di chiedere "rispondi solo con JSON" e fare regex sul testo:
 //   elimina un'intera classe di errori di parsing.
+// - Un'unica lista andamento_consumi copre sia il caso "solo totale
+//   mensile" sia il caso "totale già scomposto per fascia F1/F2/F3":
+//   in una versione precedente questi erano due liste separate
+//   (andamento_consumi + dettaglio_mensile_fasce, entrambe con campi
+//   kWh obbligatori), e i campi obbligatori spingevano il modello a
+//   inventare 0 come segnaposto quando non era sicuro di un valore o
+//   quando doveva scegliere in quale delle due liste inserire una voce,
+//   producendo una tabella tutta a zero. Un'unica lista con soli i campi
+//   letti con certezza valorizzati (gli altri null) evita la scelta
+//   forzata e riduce il rischio di valori inventati.
 // - Il grafico "andamento dei consumi" delle bollette italiane mostra
 //   quasi sempre una finestra mobile di 12 mesi (non l'anno solare
 //   gennaio-dicembre): al modello viene chiesto di leggere mese E anno di
-//   ogni barra, poi il server riallinea i valori nell'array fisso
+//   ogni voce, poi il server riallinea i valori nell'array fisso
 //   gennaio->dicembre atteso dal frontend, preferendo l'anno più recente
 //   in caso di doppioni.
-// - Quando la fonte mostra una vera TABELLA di dettaglio con i kWh già
-//   separati per fascia mese per mese (es. Mese|F1|F2|F3|Totale, come in
-//   molte bollette o in estratti/screenshot del cliente), quella tabella
-//   va letta riga per riga: la ripartizione F1/F2/F3 varia da mese a mese
-//   (es. più F1 in un mese, più F3 in un altro) e NON può essere
-//   approssimata applicando un'unica percentuale complessiva a ogni mese
-//   — quell'approssimazione era la causa principale di letture sbagliate
-//   quando una tabella di dettaglio era disponibile ma non veniva usata.
+// - Il server scarta come inaffidabile qualunque voce con valori
+//   interamente a zero (un mese/fascia realmente a 0 kWh è di fatto
+//   inesistente in una bolletta reale): è quasi sempre un segnaposto
+//   inventato dal modello, mai un dato vero.
 
 const TOOL_NAME = "estrai_dati_bolletta";
 
 const TOOL_SCHEMA = {
   name: TOOL_NAME,
   description:
-    "Registra i dati letti da una foto di bolletta elettrica italiana. Usa null per qualsiasi valore che non riesci a leggere con sufficiente certezza: non stimare o inventare mai numeri.",
+    "Registra i dati letti da una foto di bolletta elettrica italiana. Usa null per qualsiasi valore che non riesci a leggere con sufficiente certezza: non stimare o inventare mai numeri, e non usare mai 0 come segnaposto.",
   input_schema: {
     type: "object",
     properties: {
@@ -48,7 +54,7 @@ const TOOL_SCHEMA = {
       consumo_annuo_kwh: {
         type: ["number", "null"],
         description:
-          "Consumo totale annuo in kWh, se indicato esplicitamente in bolletta oppure ricavabile sommando un grafico/tabella dell'andamento dei consumi letto per intero (tutti e 12 i mesi).",
+          "Consumo totale annuo in kWh, se indicato esplicitamente in bolletta oppure ricavabile sommando andamento_consumi letto per intero (tutti e 12 i mesi).",
       },
       spesa_annua_euro: {
         type: ["number", "null"],
@@ -58,31 +64,30 @@ const TOOL_SCHEMA = {
       andamento_consumi: {
         type: "array",
         description:
-          "Una voce per ogni barra/punto di un grafico o tabella 'andamento dei consumi' che riporta SOLO il totale mensile (senza scomposizione per fascia). Array vuoto se non presente/leggibile. Non usare questo campo per righe che riportano già F1/F2/F3 separati: quelle vanno in dettaglio_mensile_fasce.",
+          "Una voce per ciascun mese che riesci a leggere con sufficiente certezza da un grafico o tabella dei consumi (es. 'andamento dei consumi', 'dettaglio consumi', un riepilogo letture, o una tabella con colonne come Mese|F1|F2|F3|Totale). NON includere una voce per un mese che non riesci a leggere con certezza — ometterlo è sempre meglio che indovinare o mettere 0.",
         items: {
           type: "object",
           properties: {
-            mese: { type: "integer", minimum: 1, maximum: 12, description: "Numero del mese (1=gennaio ... 12=dicembre) riportato sotto la barra." },
-            anno: { type: ["integer", "null"], description: "Anno a 4 cifre riportato per quella barra, se presente; null se non indicato." },
-            kwh: { type: "number", description: "Consumo totale in kWh per quel mese. Se il grafico è bimestrale, dividi il valore a metà tra i due mesi del bimestre." },
+            mese: {
+              type: "integer",
+              minimum: 1,
+              maximum: 12,
+              description: "Numero del mese (1=gennaio ... 12=dicembre), letto dall'etichetta della voce (non assumere l'ordine gennaio->dicembre).",
+            },
+            anno: { type: ["integer", "null"], description: "Anno a 4 cifre se indicato per questa voce, altrimenti null." },
+            totale_kwh: {
+              type: ["number", "null"],
+              description:
+                "Totale kWh del mese, se la fonte lo riporta direttamente. Lascia null se conosci solo la scomposizione per fascia (f1_kwh/f2_kwh/f3_kwh): il totale verrà calcolato sommandoli automaticamente.",
+            },
+            f1_kwh: {
+              type: ["number", "null"],
+              description: "kWh in fascia F1 per quel mese, SOLO se la fonte riporta esplicitamente questo valore separato per fascia. null se la fonte mostra solo un totale mensile senza scomposizione.",
+            },
+            f2_kwh: { type: ["number", "null"], description: "kWh in fascia F2 per quel mese (stessa logica di f1_kwh)." },
+            f3_kwh: { type: ["number", "null"], description: "kWh in fascia F3 per quel mese (stessa logica di f1_kwh)." },
           },
-          required: ["mese", "kwh"],
-        },
-      },
-      dettaglio_mensile_fasce: {
-        type: "array",
-        description:
-          "Una voce per ogni riga/periodo di una TABELLA che riporta i kWh già separati per fascia F1/F2/F3 per ciascun mese o bimestre (es. colonne Mese|F1|F2|F3|Totale). Ha PRIORITÀ su f1_pct/f2_pct/f3_pct quando presente, perché dà valori reali per ogni mese invece di un'unica percentuale media da applicare a tutti i mesi allo stesso modo. Array vuoto se questa tabella non è presente nella foto.",
-        items: {
-          type: "object",
-          properties: {
-            mese: { type: "integer", minimum: 1, maximum: 12, description: "Numero del mese (1=gennaio ... 12=dicembre) di questa riga." },
-            anno: { type: ["integer", "null"], description: "Anno a 4 cifre se indicato, altrimenti null." },
-            f1_kwh: { type: "number", description: "kWh in fascia F1 per quel mese. Se la riga è bimestrale, dividi ogni valore a metà tra i due mesi del bimestre." },
-            f2_kwh: { type: "number", description: "kWh in fascia F2 per quel mese (stessa logica di f1_kwh per righe bimestrali)." },
-            f3_kwh: { type: "number", description: "kWh in fascia F3 per quel mese (stessa logica di f1_kwh per righe bimestrali)." },
-          },
-          required: ["mese", "f1_kwh", "f2_kwh", "f3_kwh"],
+          required: ["mese"],
         },
       },
       confidence: {
@@ -95,29 +100,23 @@ const TOOL_SCHEMA = {
         description: "Eventuali osservazioni brevi utili (es. foto sfocata, fornitore riconosciuto, dati parziali).",
       },
     },
-    required: [
-      "f1_pct",
-      "f2_pct",
-      "f3_pct",
-      "consumo_annuo_kwh",
-      "spesa_annua_euro",
-      "andamento_consumi",
-      "dettaglio_mensile_fasce",
-      "confidence",
-    ],
+    required: ["f1_pct", "f2_pct", "f3_pct", "consumo_annuo_kwh", "spesa_annua_euro", "andamento_consumi", "confidence"],
   },
 };
 
 const PROMPT_TEXT =
   "Questa è una foto di una bolletta elettrica italiana (o dei suoi grafici/tabelle dei consumi). " +
   "Il layout varia molto da fornitore a fornitore (Enel, Eni Plenitude, A2A, Hera Comm, Iren, Sorgenia, Edison, Acea, Sinergy, Trenta, Octopus Energy, ecc.): non assumere una posizione fissa degli elementi, cerca i dati per significato.\n\n" +
+  "REGOLA PIÙ IMPORTANTE: se non sei sicuro di un valore, lascialo null (oppure ometti del tutto quella voce/mese) piuttosto che indovinare. Non usare MAI 0 come valore segnaposto per un dato che non riesci a leggere: un consumo mensile o per fascia realistico non è quasi mai esattamente zero, quindi uno 0 non letto con certezza è quasi sempre un errore che rovina tutta la tabella.\n\n" +
   "Estrai quello che riesci a leggere con sicurezza, usando lo strumento fornito:\n\n" +
-  "1. DETTAGLIO MENSILE PER FASCIA (dettaglio_mensile_fasce) — controlla questo PRIMA di tutto: se nella foto è presente una vera TABELLA (non un grafico a torta) con i kWh già separati per fascia mese per mese o bimestre per bimestre — tipicamente con colonne come Mese|F1|F2|F3|Totale — leggi quella tabella riga per riga e riportane ogni riga in dettaglio_mensile_fasce. Questo è il dato più preciso possibile: la ripartizione reale tra F1/F2/F3 cambia da mese a mese (es. un mese può avere più F1 e un altro più F3), quindi NON deve mai essere approssimata applicando una singola percentuale media a tutti i mesi quando questa tabella è disponibile. Se un periodo è bimestrale, dividi ogni valore (F1, F2, F3) a metà tra i due mesi del bimestre. Se questa tabella non è presente, lascia dettaglio_mensile_fasce come array vuoto.\n\n" +
-  "2. FASCE F1/F2/F3 IN PERCENTUALE (f1_pct/f2_pct/f3_pct) — usa questo SOLO come alternativa quando NON è disponibile la tabella di dettaglio del punto 1, ma la bolletta riporta comunque una ripartizione complessiva tra le fasce (tipicamente da un grafico a torta o a barre riferito all'intero periodo). Le tre percentuali devono sommare a 100. Se la bolletta è invece monoraria / a fascia unica (nessuna suddivisione F1/F2/F3), imposta tariffa_a_fasce a false e lascia f1_pct/f2_pct/f3_pct a null: non inventare una ripartizione.\n\n" +
-  "3. CONSUMO ANNUO: cerca un totale esplicito (es. 'consumo annuo', 'kWh fatturati negli ultimi 12 mesi', totale di un riepilogo annuale). Se non c'è un totale esplicito ma riesci a leggere per intero (tutti e 12 i mesi) la tabella del punto 1 o il grafico del punto 4, puoi calcolare il totale annuo sommandone i valori.\n\n" +
-  "4. SPESA ANNUA: SOLO se la bolletta riporta esplicitamente un importo totale su base annua. Se riporta solo un importo periodico (mensile, bimestrale, ecc.), NON moltiplicare né estrapolare tu il totale annuo: lascia il campo a null.\n\n" +
-  "5. ANDAMENTO DEI CONSUMI (andamento_consumi) — usa questo SOLO per un grafico/tabella che riporta il totale mensile SENZA scomposizione per fascia (se la scomposizione per fascia mese per mese è disponibile, va invece in dettaglio_mensile_fasce, punto 1). Molte bollette includono un grafico a barre intitolato 'andamento dei consumi' o simile, con circa 12 barre. IMPORTANTE: questo grafico mostra quasi sempre una finestra mobile degli ultimi 12 mesi (es. da ottobre di due anni fa a settembre dell'anno corrente), NON l'anno solare gennaio-dicembre nell'ordine in cui appaiono le barre. Sotto (o sopra) ogni barra è di solito riportata un'etichetta con il mese (spesso abbreviato: gen, feb, mar...) ed eventualmente l'anno. Per OGNI barra che riesci a leggere con certezza, riporta il numero del mese (1-12) corrispondente all'etichetta, l'anno se indicato, e il valore in kWh — non assumere semplicemente che la prima barra sia gennaio. Se un valore è bimestrale, dividilo a metà tra i due mesi del bimestre e registra entrambi. Se il grafico non è presente nella foto, o non riesci a leggere con sufficiente certezza nessuna barra, lascia andamento_consumi come array vuoto: non stimare o inventare valori.\n\n" +
-  "Usa null (o array vuoto per andamento_consumi/dettaglio_mensile_fasce) per ogni valore che non riesci a leggere con sufficiente certezza dalla foto. Se la foto è sfocata, tagliata o non riesci a leggere nulla con sufficiente certezza, usa confidence \"bassa\" e valorizza note di conseguenza.";
+  "1. ANDAMENTO MENSILE DEI CONSUMI (andamento_consumi): cerca un grafico o una tabella con i consumi mese per mese (tipicamente 'andamento dei consumi', 'dettaglio consumi', un riepilogo letture, oppure una tabella con colonne come Mese|F1|F2|F3|Totale). Per ogni mese che riesci a leggere con certezza:\n" +
+  "   - se la fonte mostra i kWh già separati per fascia (colonne F1/F2/F3), riporta f1_kwh/f2_kwh/f3_kwh per quel mese — questo è il dato più preciso possibile: la ripartizione reale tra fasce cambia da mese a mese (es. un mese può avere più F1 e un altro più F3) e NON va mai approssimata applicando un'unica percentuale fissa a tutti i mesi;\n" +
+  "   - se la fonte mostra solo un totale mensile senza scomposizione, riporta solo totale_kwh e lascia f1_kwh/f2_kwh/f3_kwh a null.\n" +
+  "   IMPORTANTE su mese/anno: questo tipo di grafico o tabella mostra quasi sempre una finestra mobile degli ultimi 12 mesi (es. da ottobre di due anni fa a settembre dell'anno corrente), NON l'anno solare gennaio-dicembre nell'ordine in cui appaiono le voci: leggi sempre l'etichetta del mese (ed eventualmente l'anno) di ciascuna voce, non assumere che la prima sia gennaio. Se una riga/voce è bimestrale, dividi ogni valore a metà tra i due mesi del bimestre e crea due voci separate. Ometti del tutto un mese che non riesci a leggere con sufficiente certezza: NON creare una voce con valori a 0 o indovinati.\n\n" +
+  "2. FASCE F1/F2/F3 IN PERCENTUALE (f1_pct/f2_pct/f3_pct): usa questo SOLO quando NON riesci a leggere una scomposizione per fascia mese per mese (punto 1), ma la bolletta riporta comunque una ripartizione complessiva tra le fasce (tipicamente un grafico a torta riferito all'intero periodo). Le tre percentuali devono sommare a 100. Se la bolletta è invece monoraria / a fascia unica (nessuna suddivisione F1/F2/F3), imposta tariffa_a_fasce a false e lascia f1_pct/f2_pct/f3_pct a null: non inventare una ripartizione.\n\n" +
+  "3. CONSUMO ANNUO (consumo_annuo_kwh): cerca un totale esplicito (es. 'consumo annuo', 'kWh fatturati negli ultimi 12 mesi', totale di un riepilogo annuale). Se non c'è un totale esplicito ma riesci a leggere per intero (tutti e 12 i mesi) il punto 1, puoi calcolare il totale annuo sommandone i valori.\n\n" +
+  "4. SPESA ANNUA (spesa_annua_euro): SOLO se la bolletta riporta esplicitamente un importo totale su base annua. Se riporta solo un importo periodico (mensile, bimestrale, ecc.), NON moltiplicare né estrapolare tu il totale annuo: lascia il campo a null.\n\n" +
+  "Usa null per ogni valore che non riesci a leggere con sufficiente certezza dalla foto. Se la foto è sfocata, tagliata o non riesci a leggere nulla con sufficiente certezza, usa confidence \"bassa\" e valorizza note di conseguenza.";
 
 async function preprocessImage(arrayBuffer, mediaType) {
   try {
@@ -135,71 +134,70 @@ async function preprocessImage(arrayBuffer, mediaType) {
   }
 }
 
-// Riallinea le letture {mese, anno, kwh} in un array fisso di 12 posizioni
-// (indice 0 = gennaio ... 11 = dicembre), preferendo l'anno più recente in
-// caso di doppioni sullo stesso mese. Ritorna null nei mesi non letti.
-function buildMonthlyKwhArray(andamentoConsumi) {
-  if (!Array.isArray(andamentoConsumi) || andamentoConsumi.length === 0) return null;
+// Da un'unica lista di voci {mese, anno, totale_kwh, f1_kwh, f2_kwh, f3_kwh}
+// (parzialmente valorizzate: ogni campo può essere assente/null) ricava due
+// array fissi di 12 posizioni (indice 0 = gennaio ... 11 = dicembre):
+// - monthlyKwh: il totale mensile (letto direttamente, o calcolato sommando
+//   f1+f2+f3 quando il totale non è indicato separatamente);
+// - monthlyDetail: la scomposizione {f1,f2,f3} per i soli mesi in cui è
+//   stata letta per intero.
+// In caso di più voci per lo stesso mese (doppioni), si preferisce quella
+// con l'anno più recente. Qualunque valore pari a 0 (o negativo) viene
+// scartato come inaffidabile: un consumo realmente nullo per un mese o una
+// fascia intera è praticamente inesistente in una bolletta reale, quindi
+// uno 0 è quasi sempre un segnaposto inventato dal modello piuttosto che un
+// dato vero — meglio trattare quel mese come "non letto" che mostrarlo.
+function buildMonthlyArrays(andamentoConsumi) {
+  if (!Array.isArray(andamentoConsumi) || andamentoConsumi.length === 0) {
+    return { monthlyKwh: null, monthlyDetail: null };
+  }
 
-  const perMese = new Map();
+  const perMeseTotale = new Map();
+  const perMeseDettaglio = new Map();
+
   for (const entry of andamentoConsumi) {
     if (!entry || typeof entry.mese !== "number") continue;
     const mese = Math.round(entry.mese);
     if (mese < 1 || mese > 12) continue;
-    const kwh = Number(entry.kwh);
-    if (!Number.isFinite(kwh) || kwh < 0) continue;
     const anno = typeof entry.anno === "number" ? Math.round(entry.anno) : null;
 
-    const existing = perMese.get(mese);
-    const preferNew =
-      !existing || (anno !== null && (existing.anno === null || anno > existing.anno));
-    if (preferNew) perMese.set(mese, { anno, kwh });
+    const f1 = typeof entry.f1_kwh === "number" && Number.isFinite(entry.f1_kwh) ? entry.f1_kwh : null;
+    const f2 = typeof entry.f2_kwh === "number" && Number.isFinite(entry.f2_kwh) ? entry.f2_kwh : null;
+    const f3 = typeof entry.f3_kwh === "number" && Number.isFinite(entry.f3_kwh) ? entry.f3_kwh : null;
+    const haveFasceComplete = f1 !== null && f2 !== null && f3 !== null && f1 >= 0 && f2 >= 0 && f3 >= 0 && f1 + f2 + f3 > 0;
+
+    if (haveFasceComplete) {
+      const existing = perMeseDettaglio.get(mese);
+      const preferNew = !existing || (anno !== null && (existing.anno === null || anno > existing.anno));
+      if (preferNew) perMeseDettaglio.set(mese, { anno, f1, f2, f3 });
+    }
+
+    let totale = typeof entry.totale_kwh === "number" && Number.isFinite(entry.totale_kwh) ? entry.totale_kwh : null;
+    if (totale === null && haveFasceComplete) totale = f1 + f2 + f3;
+    if (totale !== null && totale > 0) {
+      const existing = perMeseTotale.get(mese);
+      const preferNew = !existing || (anno !== null && (existing.anno === null || anno > existing.anno));
+      if (preferNew) perMeseTotale.set(mese, { anno, kwh: totale });
+    }
   }
 
-  if (perMese.size === 0) return null;
+  const monthlyKwh =
+    perMeseTotale.size > 0
+      ? Array.from({ length: 12 }, (_, i) => {
+          const v = perMeseTotale.get(i + 1);
+          return v ? Math.round(v.kwh) : null;
+        })
+      : null;
 
-  const result = [];
-  for (let mese = 1; mese <= 12; mese++) {
-    const v = perMese.get(mese);
-    result.push(v ? Math.round(v.kwh) : null);
-  }
-  return result;
-}
+  const monthlyDetail =
+    perMeseDettaglio.size > 0
+      ? Array.from({ length: 12 }, (_, i) => {
+          const v = perMeseDettaglio.get(i + 1);
+          return v ? { f1: Math.round(v.f1), f2: Math.round(v.f2), f3: Math.round(v.f3) } : null;
+        })
+      : null;
 
-// Come buildMonthlyKwhArray, ma per il dettaglio F1/F2/F3 letto da una vera
-// tabella mese per mese: riallinea le letture {mese, anno, f1_kwh, f2_kwh,
-// f3_kwh} in un array fisso di 12 posizioni (gennaio->dicembre),
-// preferendo l'anno più recente in caso di doppioni. null nei mesi non
-// letti (il frontend userà, per quei soli mesi, la ripartizione
-// percentuale come fallback, se disponibile).
-function buildMonthlyDetailArray(dettaglioMensileFasce) {
-  if (!Array.isArray(dettaglioMensileFasce) || dettaglioMensileFasce.length === 0) return null;
-
-  const perMese = new Map();
-  for (const entry of dettaglioMensileFasce) {
-    if (!entry || typeof entry.mese !== "number") continue;
-    const mese = Math.round(entry.mese);
-    if (mese < 1 || mese > 12) continue;
-    const f1 = Number(entry.f1_kwh);
-    const f2 = Number(entry.f2_kwh);
-    const f3 = Number(entry.f3_kwh);
-    if (![f1, f2, f3].every((v) => Number.isFinite(v) && v >= 0)) continue;
-    const anno = typeof entry.anno === "number" ? Math.round(entry.anno) : null;
-
-    const existing = perMese.get(mese);
-    const preferNew =
-      !existing || (anno !== null && (existing.anno === null || anno > existing.anno));
-    if (preferNew) perMese.set(mese, { anno, f1, f2, f3 });
-  }
-
-  if (perMese.size === 0) return null;
-
-  const result = [];
-  for (let mese = 1; mese <= 12; mese++) {
-    const v = perMese.get(mese);
-    result.push(v ? { f1: Math.round(v.f1), f2: Math.round(v.f2), f3: Math.round(v.f3) } : null);
-  }
-  return result;
+  return { monthlyKwh, monthlyDetail };
 }
 
 export async function POST(req) {
@@ -254,8 +252,7 @@ export async function POST(req) {
     }
 
     const parsed = toolUse.input;
-    const monthlyKwh = buildMonthlyKwhArray(parsed.andamento_consumi);
-    const monthlyDetail = buildMonthlyDetailArray(parsed.dettaglio_mensile_fasce);
+    const { monthlyKwh, monthlyDetail } = buildMonthlyArrays(parsed.andamento_consumi);
 
     return NextResponse.json({
       available: true,
