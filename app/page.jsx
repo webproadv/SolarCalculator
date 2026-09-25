@@ -68,6 +68,14 @@ function fmtEuroIt(value) {
   return `€ ${fmtNumIt(value, 2)}`;
 }
 
+// Come fmtEuroIt ma con il segno "-" prima del simbolo per i valori negativi
+// (es. "-€ 12.016,00" invece di "€ -12.016,00") — usato per Saldo/Delta nel
+// riepilogo flusso di cassa del PDF stampabile.
+function fmtEuroSignedIt(value) {
+  const n = Number(value) || 0;
+  return n < 0 ? `-${fmtEuroIt(Math.abs(n))}` : fmtEuroIt(n);
+}
+
 // Racchiude tra virgolette (raddoppiando quelle interne) un valore CSV solo
 // se contiene la virgola, un a-capo o una virgoletta — esattamente come fa
 // il template originale per i numeri in formato italiano.
@@ -616,7 +624,7 @@ export default function Page() {
 
   return (
     <>
-      <div className="topnav">
+      <div className="topnav screen-only">
         <div className="topnav-inner">
           <div className="brandmark">
             <span className="dot" aria-hidden="true"></span>
@@ -1619,7 +1627,7 @@ function PrintReport({
 
         <dl className="pr-cover-meta">
           <div><dt>Coordinate sito</dt><dd>{company.lat.toFixed(4)}, {company.lng.toFixed(4)}</dd></div>
-          <div><dt>Preparato da</dt><dd>Lenergy Spa — Business Energy Advisor</dd></div>
+          <div><dt>Preparato da</dt><dd>Lenergy Spa</dd></div>
           <div><dt>Spesa energetica annua (IVA inclusa)</dt><dd>€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd></div>
           <div><dt>Consumo annuo dichiarato</dt><dd>{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</dd></div>
         </dl>
@@ -1641,7 +1649,7 @@ function PrintReport({
           consumi e produzione, D) Soluzione economica — Noleggio operativo, E) Dati di partenza.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 1</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 1</span></div>
       </div>
 
       {/* Pagina 2 — Sezione A: Producibilità fotovoltaica */}
@@ -1680,7 +1688,7 @@ function PrintReport({
         <h3 className="pr-h3">Produzione mensile stimata</h3>
         <PrintBarChart data={monthlyProduction} />
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 2</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 2</span></div>
       </div>
 
       {/* Pagina 3 — Sezione B: Dimensionamento impianto */}
@@ -1726,7 +1734,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 3</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 3</span></div>
       </div>
 
       {/* Pagina 4 — Sezione C: andamento mensile */}
@@ -1778,7 +1786,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 4</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4</span></div>
       </div>
 
       {/* Pagina 5 — Sezione D: Noleggio operativo */}
@@ -1841,7 +1849,7 @@ function PrintReport({
           Il &quot;Delta cash flow&quot; indica il guadagno (verde) o la perdita (rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 5</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 5</span></div>
       </div>
 
       {/* Pagina 6 — Sezione E: dati di partenza + nota metodologica */}
@@ -1869,7 +1877,7 @@ function PrintReport({
         <p className="pr-note" style={{ fontSize: 10.5 }}>
           La produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step
           Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità
-          tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla
+          zonale ricavato da simulazione PVGIS. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
           una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
           disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
@@ -1878,7 +1886,17 @@ function PrintReport({
           Questo è un documento indicativo, non un preventivo tecnico vincolante.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa — Business Energy Advisor</span><span>Pagina 6</span></div>
+        <div className="pr-contact">
+          <div className="pr-contact-name">Dr. Maurizio Galli</div>
+          <div className="pr-contact-role">Business Energy Advisor</div>
+          <div className="pr-contact-rows">
+            <span><b>Tel.</b> +39 3391860201</span>
+            <span><b>Email</b> maurizio.galli@lenergy.it</span>
+            <span><b>Web</b> www.lenergy.it</span>
+          </div>
+        </div>
+
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 6</span></div>
       </div>
     </div>
   );
@@ -1974,16 +1992,16 @@ function PrintCashFlowTable({ title, rows, saldo, delta }) {
             <tr key={r.label}>
               <td className="pr-cf-label">{r.label}</td>
               <td className={`num pr-cf-entrata ${r.entrata != null ? "has-value" : ""}`}>
-                {r.entrata != null ? `€ ${Math.round(r.entrata).toLocaleString("it-IT")}` : ""}
+                {r.entrata != null ? fmtEuroIt(r.entrata) : ""}
               </td>
               <td className={`num pr-cf-uscita ${r.uscita != null ? "has-value" : ""}`}>
-                {r.uscita != null ? `€ ${Math.round(r.uscita).toLocaleString("it-IT")}` : ""}
+                {r.uscita != null ? fmtEuroIt(r.uscita) : ""}
               </td>
               {i === 0 && (
-                <td className="pr-cf-saldo" rowSpan={rows.length}>{fmtEuroSigned(saldo)}</td>
+                <td className="pr-cf-saldo" rowSpan={rows.length}>{fmtEuroSignedIt(saldo)}</td>
               )}
               {i === 0 && (
-                <td className={`pr-cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSigned(delta)}</td>
+                <td className={`pr-cf-delta ${deltaGood ? "good" : "bad"}`} rowSpan={rows.length}>{fmtEuroSignedIt(delta)}</td>
               )}
             </tr>
           ))}

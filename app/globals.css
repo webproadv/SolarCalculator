@@ -399,4 +399,14 @@ th.num{ text-align:right; }
   .pr-cashflow-table td.pr-cf-delta{ text-align:center; vertical-align:middle; font-weight:700; font-family:"IBM Plex Mono", monospace; }
   .pr-cashflow-table td.pr-cf-delta.good{ background:#8FE39B; color:#0B4A22; }
   .pr-cashflow-table td.pr-cf-delta.bad{ background:#F0837A; color:#5C120A; }
+
+  /* Riquadro contatti in chiusura del documento (ultima pagina). */
+  .pr-contact{
+    margin-top:22px; padding:16px 20px; border:1px solid #D8DCD3; border-left:4px solid #B8791F;
+    border-radius:8px; background:#FAFAF7;
+  }
+  .pr-contact .pr-contact-name{ font-family:"IBM Plex Serif", Georgia, serif; font-size:15px; font-weight:600; }
+  .pr-contact .pr-contact-role{ font-size:10.5px; color:#7A857D; text-transform:uppercase; letter-spacing:.04em; margin:2px 0 10px; }
+  .pr-contact .pr-contact-rows{ display:flex; flex-wrap:wrap; gap:6px 26px; font-size:11px; color:#4B564F; }
+  .pr-contact .pr-contact-rows b{ font-family:"IBM Plex Mono", monospace; font-size:9px; text-transform:uppercase; letter-spacing:.03em; color:#B8791F; margin-right:5px; }
 }
