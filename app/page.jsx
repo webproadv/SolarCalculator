@@ -516,12 +516,11 @@ export default function Page() {
     }
   }
 
-  // Foto satellitare del sito (Google Maps Static API): generata
+  // Foto satellitare del sito (Mapbox Static Images API): generata
   // automaticamente non appena è pronto un preventivo reale (non demo) —
-  // nessuna azione richiesta all'utente. A differenza della vecchia foto presa
-  // dal layer RGB della Solar API, non serve un rilievo del tetto disponibile:
-  // basta la posizione dell'azienda, quindi la generiamo anche quando
-  // buildingInsights non ha dati per l'indirizzo (roofDataUnavailable).
+  // nessuna azione richiesta all'utente. Non serve un rilievo del tetto
+  // disponibile: basta la posizione dell'azienda, quindi la generiamo anche
+  // quando buildingInsights non ha dati per l'indirizzo (roofDataUnavailable).
   async function fetchRoofImagesAuto(quoteData, companyData) {
     if (quoteData?.demo) return;
     setRoofImagesError("");
@@ -1268,7 +1267,7 @@ function Dashboard({
         <div className="grid-2" style={{ marginTop: 20 }}>
           <div className="card">
             <h3>Foto satellitare del sito</h3>
-            <div className="card-note">Foto satellitare del sito, generata automaticamente da Google Maps.</div>
+            <div className="card-note">Foto satellitare del sito, generata automaticamente da Mapbox.</div>
             <div style={{ marginTop: 12 }}>
               {roofImages ? (
                 <img src={roofImages.satelliteImageUrl} alt="Foto aerea satellitare del sito" style={{ width: "100%", borderRadius: 8, display: "block" }} />
@@ -1656,7 +1655,7 @@ function PrintReport({
 
         <div className="pr-cols-2" style={{ marginTop: 18 }}>
           <div>
-            <p className="pr-note" style={{ marginTop: 0 }}>Foto satellitare del sito (Google Maps)</p>
+            <p className="pr-note" style={{ marginTop: 0 }}>Foto satellitare del sito (Mapbox)</p>
             {roofImages?.satelliteImageUrl ? (
               <img src={roofImages.satelliteImageUrl} alt="Foto satellitare del sito" className="pr-photo" />
             ) : (

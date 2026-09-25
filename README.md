@@ -22,7 +22,8 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 
 | Variabile | Serve per | Senza di essa |
 |---|---|---|
-| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights), geocodifica indirizzo→lat/lng (Google Geocoding API) **e** foto satellitare del sito (Google Maps Static API) — stessa chiave: vanno abilitate tutte e tre le API sul progetto | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
+| `GOOGLE_SOLAR_API_KEY` | Geometria tetto e producibilità aggregata (Google Solar API — Building Insights) **e** geocodifica indirizzo→lat/lng (Google Geocoding API) — stessa chiave: vanno abilitate entrambe le API sul progetto | Usa il rilievo reale di esempio (Mecprogetti Srl, Parma) |
+| `MAPBOX_ACCESS_TOKEN` | Foto satellitare del sito (Mapbox Static Images API, stile `satellite-v9`) — vedi sezione dedicata sotto | La foto satellitare non viene generata (errore mostrato in dashboard, con fallback allo schema tetto disegnato); il resto del preventivo non ne risente |
 | `APIFY_API_TOKEN` | Lookup ragione sociale/indirizzo da Partita IVA tramite l'actor Apify `dltik/italy-company-registry-scraper` (Registro Imprese/VIES) — fonte preferita | Se assente, si usa `OPENAPI_KEY` come alternativa |
 | `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
@@ -56,11 +57,20 @@ Lo schema del database si trova in `supabase/migrations/` (compatibile con l'int
 
 Appena la dashboard è pronta, l'app genera **automaticamente** (nessun bottone da premere) una foto aerea del sito, centrata sulle coordinate dell'azienda — mostrata sia in alto in dashboard (riquadro anagrafica azienda) sia nella sezione A ("Producibilità fotovoltaica") sia nel PDF stampabile.
 
-La foto viene presa dalla **Google Maps Static API** (vista satellitare, endpoint `/api/roof-image`), non più dal layer RGB della Google Solar API: quella richiesta (`dataLayers.get`) è nel livello di prezzo "Enterprise", disponibile solo dove Google ha fatto un rilievo dettagliato dell'edificio, e falliva spesso ("nessun layer RGB disponibile") anche per indirizzi normalmente coperti da Google Maps. La Maps Static API ha invece copertura satellitare pressoché ovunque, quindi la foto viene generata anche quando `buildingInsights` non ha un rilievo del tetto per l'indirizzo (`roofDataUnavailable`).
+La foto viene presa dalla **Mapbox Static Images API** (stile `satellite-v9`, vista satellitare pura senza etichette; endpoint `/api/roof-image`).
 
-Usa la stessa chiave già configurata — serve solo `GOOGLE_SOLAR_API_KEY` (va abilitata anche la **Maps Static API** sullo stesso progetto, oltre a Solar API e Geocoding API). Nota: una versione precedente disegnava anche i singoli pannelli sovrapposti alla foto; è stata rimossa perché l'allineamento non era affidabile su tutti i siti — la superficie utile per i pannelli si stima dai dati aggregati di `buildingInsights` (area massima/numero pannelli), mostrati in sezione A, non da un disegno pixel-per-pixel.
+**Perché Mapbox e non Google.** Una versione precedente usava la Google Maps Static API (`maptype=satellite`), ma dall'8 luglio 2025 Google blocca le immagini satellitari/hybrid per i progetti con fatturazione in area EEA (Europa), come adeguamento al Digital Markets Act — la richiesta risponde `403` con `"satellite and hybrid map types are not available for your account and region"` (vedi [Maps Static API adjustments for EEA customers](https://developers.google.com/maps/comms/eea/maps-static) e, per lo stesso motivo, [Map Tiles API adjustments for EEA customers](https://developers.google.com/maps/comms/eea/map-tiles)). Per un account italiano l'unica via che Google lascia aperta per il satellite è lato browser (Maps JavaScript API) o negli SDK nativi Android/iOS — non utilizzabile per generare una singola immagine statica lato server come serve qui (dashboard/PDF). Mapbox non ha questa restrizione ed espone la stessa identica logica (chiamata REST → immagine statica): è quindi il sostituto più diretto, cambia solo il fornitore, non l'architettura.
 
-Se la generazione fallisce comunque (errore di rete, chiave senza Maps Static API abilitata, ecc.), l'errore è mostrato in dashboard con fallback allo schema tetto disegnato; il resto del preventivo (numeri, dimensionamento, economics) non ne risente, perché la generazione immagine è indipendente da `/api/quote`.
+Ancora prima, la foto veniva presa dal layer RGB della Google Solar API (`dataLayers.get`): quella richiesta è nel livello di prezzo "Enterprise", disponibile solo dove Google ha fatto un rilievo dettagliato dell'edificio, e falliva spesso ("nessun layer RGB disponibile") anche per indirizzi normalmente coperti da satellite. Mapbox ha invece copertura satellitare pressoché ovunque, quindi la foto viene generata anche quando `buildingInsights` non ha un rilievo del tetto per l'indirizzo (`roofDataUnavailable`).
+
+**Configurazione.** Serve un access token Mapbox (separato dalla chiave Google usata per Solar/Geocoding):
+1. Crea un account gratuito su [mapbox.com](https://www.mapbox.com/) (il piano gratuito copre circa 50.000 richieste di Static Images API al mese, ben oltre l'uso previsto).
+2. In **Account → Tokens** copia il "Default public token" (inizia con `pk.`).
+3. Impostalo come variabile d'ambiente `MAPBOX_ACCESS_TOKEN` (su Vercel: Settings → Environment Variables; in locale: `.env.local`).
+
+Nota: una versione ancora precedente disegnava anche i singoli pannelli sovrapposti alla foto; è stata rimossa perché l'allineamento non era affidabile su tutti i siti — la superficie utile per i pannelli si stima dai dati aggregati di `buildingInsights` (area massima/numero pannelli), mostrati in sezione A, non da un disegno pixel-per-pixel.
+
+Se la generazione fallisce comunque (errore di rete, token mancante o non valido, ecc.), l'errore è mostrato in dashboard con fallback allo schema tetto disegnato; il resto del preventivo (numeri, dimensionamento, economics) non ne risente, perché la generazione immagine è indipendente da `/api/quote`.
 
 ## Calcolo di produzione, dimensionamento e fabbisogno diurno/notturno
 
@@ -97,7 +107,7 @@ npm run dev
 ## Limiti noti (MVP)
 
 - Ogni "Salva progetto" crea una nuova riga in `progetti` (nessun "aggiorna" esplicito su un progetto esistente): utile come storico automatico delle revisioni per uno stesso cliente, ma l'elenco può accumulare più salvataggi dello stesso preventivo.
-- Aprendo un progetto salvato da "I miei progetti", la foto satellitare non viene rigenerata automaticamente (per non consumare quota Google Maps ad ogni apertura): va rigenerato un nuovo preventivo per averla.
+- Aprendo un progetto salvato da "I miei progetti", la foto satellitare non viene rigenerata automaticamente (per non consumare quota Mapbox ad ogni apertura): va rigenerato un nuovo preventivo per averla.
 - L'archivio progetti è condiviso tra tutti gli utenti autorizzati (non è diviso per singolo utente): adatto a un piccolo team che lavora sugli stessi clienti.
 - Nessuna generazione PDF del preventivo (previsto in seguito: i dati necessari sono già salvati per intero nella colonna `dati` di `progetti`).
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).

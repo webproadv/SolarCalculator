@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchRoofImages } from "../../../lib/sources";
 
-// Genera la foto aerea del sito tramite la Google Maps Static API (vista
-// satellitare, centrata sulle coordinate dell'azienda).
+// Genera la foto aerea del sito tramite la Mapbox Static Images API (vista
+// satellitare, centrata sulle coordinate dell'azienda). Non usa la Google
+// Maps Static API perché Google blocca satellite/hybrid per gli account con
+// fatturazione EEA dall'8 luglio 2025 (vedi commento in fetchRoofImages,
+// lib/sources.js).
 //
 // Endpoint separato da /api/quote (chiamato subito dopo, non appena il
 // preventivo è pronto — vedi fetchRoofImagesAuto in app/page.jsx): così un
