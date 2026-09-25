@@ -279,10 +279,16 @@ th.num{ text-align:right; }
    immediatamente leggibile e riconoscibile a colpo d'occhio. */
 .cashflow-wrap{ display:flex; flex-direction:column; gap:14px; margin-top:16px; }
 .cashflow-title{ font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); }
-.cashflow-table{ width:100%; border-collapse:collapse; border:1px solid #171D1B; border-radius:8px; overflow:hidden; font-size:13px; }
-.cashflow-table th{ background:#F5D615; color:#171D1B; font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding:8px 10px; border:1px solid #171D1B; text-align:left; }
+/* table-layout:fixed + <colgroup> (vedi CashFlowCols in page.jsx): la
+   sezione D impila più tabelle in sequenza con contenuti di lunghezza
+   diversa (una riga "Bolletta" contro le cinque righe del noleggio) — senza
+   colonne a larghezza fissa condivisa, ogni tabella si allargherebbe in
+   autonomia e le colonne non risulterebbero allineate tra una tabella e
+   l'altra. */
+.cashflow-table{ width:100%; table-layout:fixed; border-collapse:collapse; border:1px solid #171D1B; border-radius:8px; overflow:hidden; font-size:13px; }
+.cashflow-table th{ background:#F5D615; color:#171D1B; font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding:8px 10px; border:1px solid #171D1B; text-align:left; word-break:break-word; }
 .cashflow-table th.num{ text-align:right; }
-.cashflow-table td{ padding:8px 10px; border:1px solid #C3C9BC; background:#fff; color:#171D1B; }
+.cashflow-table td{ padding:8px 10px; border:1px solid #C3C9BC; background:#fff; color:#171D1B; word-break:break-word; }
 .cashflow-table td.cf-label{ font-weight:600; }
 .cashflow-table td.num{ font-family:"IBM Plex Mono"; text-align:right; }
 .cashflow-table td.cf-entrata.has-value{ background:#A7E8A0; }
@@ -388,8 +394,11 @@ th.num{ text-align:right; }
      versione a schermo (.cashflow-table) ma con dimensioni/colori dedicati
      alla stampa, coerenti con .pr-table. */
   .pr-cashflow-title{ font-family:"IBM Plex Mono", monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; color:#4B564F; font-weight:700; margin:12px 0 4px; }
-  .pr-cashflow-table{ width:100%; border-collapse:collapse; font-size:10.5px; margin:0 0 4px; }
-  .pr-cashflow-table th, .pr-cashflow-table td{ border:1px solid #171D1B; padding:5px 8px; text-align:left; }
+  /* table-layout:fixed + <colgroup> (CashFlowCols in page.jsx), stesso
+     motivo della versione a schermo: più tabelle in sequenza con contenuti
+     di lunghezza diversa vanno tenute allineate in colonna. */
+  .pr-cashflow-table{ width:100%; table-layout:fixed; border-collapse:collapse; font-size:10.5px; margin:0 0 4px; }
+  .pr-cashflow-table th, .pr-cashflow-table td{ border:1px solid #171D1B; padding:5px 8px; text-align:left; word-break:break-word; }
   .pr-cashflow-table th{ background:#F5D615; font-family:"IBM Plex Mono", monospace; font-size:8.5px; text-transform:uppercase; letter-spacing:.03em; font-weight:700; color:#171D1B; }
   .pr-cashflow-table th.num, .pr-cashflow-table td.num{ text-align:right; font-family:"IBM Plex Mono", monospace; }
   .pr-cashflow-table td.pr-cf-label{ font-weight:600; }

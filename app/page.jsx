@@ -1961,6 +1961,28 @@ function PrintComboChart({ diurno, notturno, produzione }) {
   );
 }
 
+// Larghezze di colonna condivise da CashFlowTable e PrintCashFlowTable. La
+// Sezione D (a schermo) e la pagina corrispondente del PDF impilano più
+// tabelle in sequenza con contenuti di lunghezza diversa (una sola riga
+// "Bolletta" contro le cinque righe del flusso durante il noleggio): senza
+// una larghezza di colonna condivisa, ogni <table> si dimensionerebbe da
+// sola in base al proprio contenuto (comportamento di default del browser)
+// e "Voce"/"Entrate"/"Uscite"/"Saldo"/"Delta cash flow" non risulterebbero
+// allineate verticalmente da una tabella all'altra. Va usato insieme a
+// table-layout:fixed (vedi .cashflow-table/.pr-cashflow-table in
+// globals.css), che è ciò che rende vincolanti queste percentuali.
+function CashFlowCols() {
+  return (
+    <colgroup>
+      <col style={{ width: "34%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "14%" }} />
+      <col style={{ width: "22%" }} />
+    </colgroup>
+  );
+}
+
 // Versione a stampa di CashFlowTable (vedi sopra): stessa logica (Saldo e
 // Delta cash flow accorpati su tutte le righe, celle Entrate/Uscite colorate
 // solo quando il valore è presente), ma con classi/colori dedicati al
@@ -1971,6 +1993,7 @@ function PrintCashFlowTable({ title, rows, saldo, delta }) {
     <>
       {title && <div className="pr-cashflow-title">{title}</div>}
       <table className="pr-cashflow-table">
+        <CashFlowCols />
         <thead>
           <tr>
             <th>Voce</th>
@@ -2056,6 +2079,7 @@ function CashFlowTable({ title, rows, saldo, delta }) {
     <div>
       {title && <div className="cashflow-title">{title}</div>}
       <table className="cashflow-table">
+        <CashFlowCols />
         <thead>
           <tr>
             <th>Voce</th>
