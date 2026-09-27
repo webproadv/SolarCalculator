@@ -66,7 +66,8 @@ export default function ProgettiPage() {
                   <th className="num">Impianto</th>
                   <th className="num">Accumulo</th>
                   <th className="num">Costo</th>
-                  <th>Data</th>
+                  <th>Creato il</th>
+                  <th>Aggiornato il</th>
                   <th>Salvato da</th>
                   <th></th>
                 </tr>
@@ -84,6 +85,9 @@ export default function ProgettiPage() {
                     <td className="num mono">{p.accumulo_proposto_kwh ? `${p.accumulo_proposto_kwh} kWh` : "—"}</td>
                     <td className="num mono">{p.costo_impianto_proposto ? `€ ${Number(p.costo_impianto_proposto).toLocaleString("it-IT")}` : "—"}</td>
                     <td className="mono">{new Date(p.created_at).toLocaleDateString("it-IT")}</td>
+                    <td className="mono">
+                      {p.updated_at && p.updated_at !== p.created_at ? new Date(p.updated_at).toLocaleDateString("it-IT") : "—"}
+                    </td>
                     <td style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>{p.creato_da_email || "—"}</td>
                     <td>
                       <Link href={`/?progetto=${p.id}`} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 13 }}>

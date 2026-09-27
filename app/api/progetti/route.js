@@ -28,7 +28,7 @@ export async function GET() {
   const { data, error } = await supabaseAdmin()
     .from("progetti")
     .select(
-      "id, created_at, nome_progetto, piva, ragione_sociale, comune, provincia, impianto_proposto_kwp, accumulo_proposto_kwh, costo_impianto_proposto, creato_da_email"
+      "id, created_at, updated_at, nome_progetto, piva, ragione_sociale, comune, provincia, impianto_proposto_kwp, accumulo_proposto_kwh, costo_impianto_proposto, creato_da_email"
     )
     .order("created_at", { ascending: false })
     .limit(300);
@@ -51,7 +51,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "Corpo della richiesta non valido." }, { status: 400 });
   }
 
-  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, nomeProgetto } = body || {};
+  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages, nomeProgetto } = body || {};
   if (!company || !quote) {
     return NextResponse.json({ error: "Dati mancanti: azienda e preventivo sono obbligatori." }, { status: 400 });
   }
@@ -68,8 +68,11 @@ export async function POST(req) {
     accumulo_proposto_kwh: Number(accumuloProposto) || null,
     costo_impianto_proposto: Number(costoImpiantoProposto) || null,
     // Snapshot completo: tutto ciò che serve per ricostruire la dashboard
-    // (e in futuro generare il PDF) senza dover richiamare le API esterne.
-    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio },
+    // (e in futuro generare il PDF) senza dover richiamare le API esterne —
+    // inclusa la foto satellitare (roofImages), altrimenti riaprendo il
+    // progetto sparirebbe (va rigenerata dalle API esterne, che potrebbero
+    // nel frattempo restituire un'inquadratura diversa).
+    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages },
   };
 
   const { data, error } = await supabaseAdmin().from("progetti").insert(row).select("id").single();

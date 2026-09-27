@@ -370,6 +370,11 @@ export default function Page() {
       if (saved.ocrMonthlyKwh) setOcrMonthlyKwh(saved.ocrMonthlyKwh);
       if (saved.potenzaDisponibile) setPotenzaDisponibile(saved.potenzaDisponibile);
       if (saved.fornitore) setFornitore(saved.fornitore);
+      // Foto satellitare salvata nello snapshot: senza questo la dashboard
+      // riaperta su un progetto vecchio la mostrava vuota (andava rigenerata
+      // dall'API esterna, che nel frattempo poteva anche restituire
+      // un'inquadratura diversa da quella originale).
+      if (saved.roofImages) setRoofImages(saved.roofImages);
       setProgettoCaricato({
         id: data.id,
         impiantoProposto: saved.impiantoProposto,
@@ -1069,6 +1074,7 @@ export default function Page() {
           ocrMonthlyKwh={ocrMonthlyKwh}
           potenzaDisponibile={potenzaDisponibile}
           fornitore={fornitore}
+          progettoId={progettoCaricato?.id}
           initialImpiantoProposto={progettoCaricato?.impiantoProposto}
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
           initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
@@ -1091,6 +1097,7 @@ function Dashboard({
   ocrMonthlyKwh,
   potenzaDisponibile,
   fornitore,
+  progettoId,
   initialImpiantoProposto,
   initialAccumuloProposto,
   initialCostoImpiantoProposto,
@@ -1147,21 +1154,57 @@ function Dashboard({
     setShowAlaskaModal(false);
   }
 
-  // Salvataggio su Supabase (tabella `progetti`): ogni salvataggio crea un
-  // nuovo snapshot con i valori attuali di impianto/accumulo/costo proposti.
+  // Salvataggio su Supabase (tabella `progetti`). Il primo salvataggio di un
+  // preventivo nuovo crea una riga (POST); da lì in poi "Salva progetto"
+  // diventa "Aggiorna progetto" e aggiorna quella stessa riga (PUT) — così
+  // se il cliente vuole un impianto diverso basta cambiare i campi proposti
+  // qui sotto e riaggiornare, senza rifare da capo il percorso guidato e
+  // senza accumulare una riga per ogni piccola modifica. Chi vuole comunque
+  // tenere uno storico esplicito delle revisioni può usare "Salva come nuova
+  // revisione", che crea sempre una nuova riga indipendente.
+  const [savedProjectId, setSavedProjectId] = useState(progettoId || null);
   const [saveState, setSaveState] = useState({ status: "idle", message: "" });
 
+  function buildProjectPayload() {
+    return {
+      company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore,
+      impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages,
+    };
+  }
+
   async function salvaProgetto() {
+    setSaveState({ status: "loading", message: "" });
+    try {
+      const isUpdate = Boolean(savedProjectId);
+      const r = await fetch(isUpdate ? `/api/progetti/${savedProjectId}` : "/api/progetti", {
+        method: isUpdate ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(buildProjectPayload()),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
+      if (!isUpdate && data.id) setSavedProjectId(data.id);
+      setSaveState({ status: "done", message: isUpdate ? "Progetto aggiornato." : "Progetto salvato." });
+    } catch (err) {
+      setSaveState({ status: "error", message: err.message });
+    }
+  }
+
+  // "Salva come nuova revisione": crea sempre una riga nuova (POST), anche
+  // se stiamo modificando un progetto già salvato — utile per tenere uno
+  // storico esplicito quando serve, invece di sovrascrivere quello attuale.
+  async function salvaComeNuovaRevisione() {
     setSaveState({ status: "loading", message: "" });
     try {
       const r = await fetch("/api/progetti", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio }),
+        body: JSON.stringify(buildProjectPayload()),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
-      setSaveState({ status: "done", message: "Progetto salvato." });
+      setSavedProjectId(data.id);
+      setSaveState({ status: "done", message: "Nuova revisione salvata." });
     } catch (err) {
       setSaveState({ status: "error", message: err.message });
     }
@@ -1245,8 +1288,13 @@ function Dashboard({
       <div className="save-bar">
         <button className="btn btn-primary" onClick={salvaProgetto} disabled={saveState.status === "loading"}>
           {saveState.status === "loading" && <span className="spinner" />}
-          💾 Salva progetto
+          {savedProjectId ? "💾 Aggiorna progetto" : "💾 Salva progetto"}
         </button>
+        {savedProjectId && (
+          <button className="btn btn-ghost" onClick={salvaComeNuovaRevisione} disabled={saveState.status === "loading"}>
+            🆕 Salva come nuova revisione
+          </button>
+        )}
         <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
         <button className="btn btn-ghost" onClick={() => { setAlaskaError(""); setShowAlaskaModal(true); }}>📤 PREPARA ALASKA</button>
         <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>

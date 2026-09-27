@@ -111,8 +111,8 @@ npm run dev
 
 ## Limiti noti (MVP)
 
-- Ogni "Salva progetto" crea una nuova riga in `progetti` (nessun "aggiorna" esplicito su un progetto esistente): utile come storico automatico delle revisioni per uno stesso cliente, ma l'elenco può accumulare più salvataggi dello stesso preventivo.
-- Aprendo un progetto salvato da "I miei progetti", la foto satellitare non viene rigenerata automaticamente (per non consumare quota Mapbox ad ogni apertura): va rigenerato un nuovo preventivo per averla.
+- Il primo "Salva progetto" crea una riga in `progetti`; da lì in poi il bottone diventa "Aggiorna progetto" e aggiorna quella stessa riga (utile per cambiare impianto/accumulo/costo proposti senza rifare il percorso guidato se il cliente vuole un dimensionamento diverso). Il bottone "Salva come nuova revisione" resta disponibile per chi vuole comunque tenere uno storico esplicito creando una nuova riga invece di sovrascrivere quella attuale.
+- Aprendo un progetto salvato da "I miei progetti" la foto satellitare viene ripristinata da quella salvata nello snapshot (colonna `dati`), non rigenerata: se nel frattempo Mapbox cambiasse l'immagine disponibile per quell'area, la foto mostrata resta quella del salvataggio originale (o dell'ultimo aggiornamento).
 - L'archivio progetti è condiviso tra tutti gli utenti autorizzati (non è diviso per singolo utente): adatto a un piccolo team che lavora sugli stessi clienti.
 - Nessuna generazione PDF del preventivo (previsto in seguito: i dati necessari sono già salvati per intero nella colonna `dati` di `progetti`).
 - Nessuna mappa interattiva per confermare/spostare il pin sull&apos;edificio (solo campi lat/lng editabili).
