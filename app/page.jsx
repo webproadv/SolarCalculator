@@ -327,6 +327,12 @@ export default function Page() {
   // La spesa annua, la produzione annua FV e i giorni lavorativi si
   // inseriscono sempre in questa stessa schermata, in entrambe le modalità.
   const [spesaAnnua, setSpesaAnnua] = useState("");
+  // Potenza disponibile in immissione e fornitore attuale: non entrano nel
+  // calcolo del preventivo (non vengono inviati a /api/quote), servono solo
+  // per precompilare automaticamente il CSV "Prepara Alaska" in dashboard
+  // (vedi Dashboard più sotto) senza doverli richiedere di nuovo lì.
+  const [potenzaDisponibile, setPotenzaDisponibile] = useState("");
+  const [fornitore, setFornitore] = useState("");
   const [produzioneAnnuaFvKwh, setProduzioneAnnuaFvKwh] = useState("");
   const [giorniLavorativi, setGiorniLavorativi] = useState(5);
 
@@ -362,6 +368,8 @@ export default function Page() {
       if (saved.monthly) setMonthly(saved.monthly);
       if (saved.bollettaMode) setBollettaMode(saved.bollettaMode);
       if (saved.ocrMonthlyKwh) setOcrMonthlyKwh(saved.ocrMonthlyKwh);
+      if (saved.potenzaDisponibile) setPotenzaDisponibile(saved.potenzaDisponibile);
+      if (saved.fornitore) setFornitore(saved.fornitore);
       setProgettoCaricato({
         id: data.id,
         impiantoProposto: saved.impiantoProposto,
@@ -946,6 +954,33 @@ export default function Page() {
                 </p>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 480 }}>
+                <div className="field">
+                  <label>Potenza disponibile (kW)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="es. 15"
+                    value={potenzaDisponibile}
+                    disabled={editingBloccato}
+                    onChange={(e) => setPotenzaDisponibile(e.target.value)}
+                  />
+                  <p className="hint">Potenza disponibile in immissione dichiarata dal distributore, se nota.</p>
+                </div>
+                <div className="field">
+                  <label>Fornitore attuale</label>
+                  <input
+                    type="text"
+                    placeholder="es. Enel Energia"
+                    value={fornitore}
+                    disabled={editingBloccato}
+                    onChange={(e) => setFornitore(e.target.value)}
+                  />
+                  <p className="hint">Attuale fornitore di energia elettrica dell&apos;azienda.</p>
+                </div>
+              </div>
+
               {bollettaMode === "foto" && (
                 <div className="btn-row" style={{ marginTop: 14 }}>
                   <span />
@@ -1032,6 +1067,8 @@ export default function Page() {
           monthly={monthly}
           bollettaMode={bollettaMode}
           ocrMonthlyKwh={ocrMonthlyKwh}
+          potenzaDisponibile={potenzaDisponibile}
+          fornitore={fornitore}
           initialImpiantoProposto={progettoCaricato?.impiantoProposto}
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
           initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
@@ -1052,6 +1089,8 @@ function Dashboard({
   monthly,
   bollettaMode,
   ocrMonthlyKwh,
+  potenzaDisponibile,
+  fornitore,
   initialImpiantoProposto,
   initialAccumuloProposto,
   initialCostoImpiantoProposto,
@@ -1080,14 +1119,13 @@ function Dashboard({
   );
 
   // Esportazione CSV per il partner "Alaska" (vedi buildAlaskaCsv): prima
-  // di generare il file chiediamo i pochi campi che l'app non raccoglie
-  // altrove (referente, cellulare, email, potenza disponibile, fornitore
-  // attuale) — tutto il resto viene calcolato dai dati già presenti nel
-  // preventivo.
+  // di generare il file chiediamo solo i campi che l'app non raccoglie
+  // altrove (referente, cellulare, email). Potenza disponibile e fornitore
+  // attuale si inseriscono ora nello step "Consumi e spesa" (vedi
+  // potenzaDisponibile/fornitore ricevuti come prop) e vengono presi da lì
+  // automaticamente, senza richiederli di nuovo qui.
   const [showAlaskaModal, setShowAlaskaModal] = useState(false);
-  const [alaskaForm, setAlaskaForm] = useState({
-    referente: "", cellulare: "", email: "", potenzaDisponibile: "", fornitore: "",
-  });
+  const [alaskaForm, setAlaskaForm] = useState({ referente: "", cellulare: "", email: "" });
   const [alaskaError, setAlaskaError] = useState("");
 
   function updateAlaskaField(key, value) {
@@ -1095,15 +1133,15 @@ function Dashboard({
   }
 
   function confermaAlaska() {
-    const { referente, cellulare, email, potenzaDisponibile, fornitore } = alaskaForm;
-    if (!referente.trim() || !cellulare.trim() || !email.trim() || !potenzaDisponibile || !fornitore.trim()) {
+    const { referente, cellulare, email } = alaskaForm;
+    if (!referente.trim() || !cellulare.trim() || !email.trim()) {
       setAlaskaError("Compila tutti i campi prima di generare il CSV.");
       return;
     }
     downloadAlaskaCsv({
       company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
       costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
-      ask: alaskaForm,
+      ask: { ...alaskaForm, potenzaDisponibile, fornitore },
     });
     setAlaskaError("");
     setShowAlaskaModal(false);
@@ -1119,7 +1157,7 @@ function Dashboard({
       const r = await fetch("/api/progetti", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio }),
+        body: JSON.stringify({ company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Errore nel salvataggio del progetto.");
@@ -1221,7 +1259,7 @@ function Dashboard({
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <h3>Prepara CSV Alaska</h3>
             <p className="modal-desc">
-              Questi dati non sono raccolti altrove nel preventivo: servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}.
+              Questi dati non sono raccolti altrove nel preventivo: servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi (inclusi potenza disponibile e fornitore attuale, inseriti nello step Consumi) vengono presi automaticamente dal preventivo di {company.ragioneSociale}.
             </p>
             <div className="field">
               <label>Nome referente</label>
@@ -1234,14 +1272,6 @@ function Dashboard({
             <div className="field">
               <label>Email</label>
               <input type="email" value={alaskaForm.email} onChange={(e) => updateAlaskaField("email", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Potenza disponibile (kW)</label>
-              <input type="number" step="0.1" value={alaskaForm.potenzaDisponibile} onChange={(e) => updateAlaskaField("potenzaDisponibile", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Fornitore attuale</label>
-              <input type="text" value={alaskaForm.fornitore} onChange={(e) => updateAlaskaField("fornitore", e.target.value)} />
             </div>
             {alaskaError && <div className="save-feedback error" style={{ marginBottom: 12 }}>{alaskaError}</div>}
             <div className="modal-actions">
