@@ -163,7 +163,7 @@ export default function ProgettiPage() {
 
         {progetti && progetti.length > 0 && (
           <div className="table-wrap">
-            <table>
+            <table className="progetti-table">
               <thead>
                 <tr>
                   <th>Ragione sociale</th>
@@ -181,7 +181,7 @@ export default function ProgettiPage() {
               <tbody>
                 {progetti.map((p) => (
                   <tr key={p.id}>
-                    <td>{p.ragione_sociale || "—"}</td>
+                    <td className="truncate">{p.ragione_sociale || "—"}</td>
                     <td className="mono">{p.piva || "—"}</td>
                     <td>
                       {p.comune || "—"}
@@ -194,16 +194,15 @@ export default function ProgettiPage() {
                     <td className="mono">
                       {p.updated_at && p.updated_at !== p.created_at ? new Date(p.updated_at).toLocaleDateString("it-IT") : "—"}
                     </td>
-                    <td style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>{p.creato_da_email || "—"}</td>
+                    <td className="truncate" style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>{p.creato_da_email || "—"}</td>
                     <td>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <Link href={`/?progetto=${p.id}`} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 13 }}>
+                      <div className="progetti-actions">
+                        <Link href={`/?progetto=${p.id}`} className="btn btn-primary btn-sm">
                           Apri
                         </Link>
                         <button
                           type="button"
-                          className="btn btn-danger"
-                          style={{ padding: "6px 14px", fontSize: 13 }}
+                          className="btn btn-danger btn-sm"
                           onClick={() => handleElimina(p)}
                           disabled={deletingId === p.id}
                         >
@@ -211,12 +210,11 @@ export default function ProgettiPage() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn-ghost"
-                          style={{ padding: "6px 14px", fontSize: 13 }}
+                          className="btn btn-ghost btn-sm"
                           onClick={() => apriModalePipe(p)}
                           disabled={pipingId === p.id}
                         >
-                          {pipingId === p.id ? "Invio…" : "📤 Pipe"}
+                          {pipingId === p.id ? "Invio…" : "Pipe"}
                         </button>
                       </div>
                     </td>
