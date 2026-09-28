@@ -15,6 +15,7 @@ import {
   noleggioOperativo,
   flussoCassaNoleggio,
 } from "../lib/calc";
+import { pdfDownloadFilename } from "../lib/naming";
 
 const RATE_NOLEGGIO_OPTIONS = [84, 72, 60];
 
@@ -1227,6 +1228,26 @@ function Dashboard({
     setAlaskaForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // "Stampa preventivo" apre la finestra di stampa del browser sul documento
+  // .print-report (vedi sotto): se l'utente sceglie "Salva come PDF", il
+  // nome file proposto di default è il document.title corrente — per questo
+  // lo si imposta qui al volo su "Analisi Energetica <azienda>" appena prima
+  // di window.print(), e lo si ripristina subito dopo (sia via evento
+  // "afterprint" — Chrome/Edge/Firefox — sia con un timeout di sicurezza,
+  // perché "afterprint" non scatta in ogni browser quando si annulla la
+  // stampa invece di completarla).
+  function handleStampa() {
+    const titoloOriginale = document.title;
+    document.title = pdfDownloadFilename("Analisi Energetica", company.ragioneSociale);
+    const ripristina = () => {
+      document.title = titoloOriginale;
+      window.removeEventListener("afterprint", ripristina);
+    };
+    window.addEventListener("afterprint", ripristina);
+    window.setTimeout(ripristina, 60000); // rete di sicurezza, non il meccanismo principale
+    window.print();
+  }
+
   async function generaPdfNoleggio(data) {
     setNoleggioError("");
     setPdfNoleggioLoading(true);
@@ -1242,10 +1263,9 @@ function Dashboard({
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
-      const nomeFile = (data.company.ragioneSociale || "azienda").trim().replace(/[^a-z0-9]+/gi, "_");
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Noleggio_${nomeFile}.pdf`;
+      a.download = `${pdfDownloadFilename("Proposta noleggio", data.company.ragioneSociale)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1435,7 +1455,7 @@ function Dashboard({
             🆕 Salva come nuova revisione
           </button>
         )}
-        <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
+        <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa preventivo</button>
         <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("csv")}>📤 CSV Noleggio</button>
         <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
           {pdfNoleggioLoading && <span className="spinner" />}
@@ -1599,6 +1619,41 @@ function Dashboard({
             <StatMini v={`${quote.input.consumoNotturnoKwh.toLocaleString("it-IT")} kWh`} l="Consumo notturno" />
             <StatMini v={`${quote.sizing.kwpSuggerito} kWp`} l="Potenza impianto consigliata (consumo totale ÷ produzione annua FV)" />
             <StatMini v={`${quote.sizing.accumuloSuggeritoKwh} kWh`} l="Potenza accumulo consigliata (consumo notturno ÷ 360)" />
+          </div>
+
+          <div className="card-note" style={{ marginTop: 20 }}>Andamento mensile dei consumi (diurno/notturno), con la tabella dei valori corrispondenti</div>
+          <div style={{ display: "flex", gap: 24, marginTop: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ flex: "1 1 360px", minWidth: 280 }}>
+              <ConsumptionChart diurno={monthlyDiurno} notturno={monthlyNotturno} />
+            </div>
+            <div style={{ flex: "1 1 280px", minWidth: 240 }}>
+              <table style={{ fontSize: 12.5 }}>
+                <thead>
+                  <tr>
+                    <th>Mese</th>
+                    <th className="num">Diurno</th>
+                    <th className="num">Notturno</th>
+                    <th className="num">Totale</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {MESI_BREVI.map((m, i) => (
+                    <tr key={m}>
+                      <td>{m}</td>
+                      <td className="num mono">{Math.round(monthlyDiurno[i]).toLocaleString("it-IT")}</td>
+                      <td className="num mono">{Math.round(monthlyNotturno[i]).toLocaleString("it-IT")}</td>
+                      <td className="num mono">{Math.round(monthlyDiurno[i] + monthlyNotturno[i]).toLocaleString("it-IT")}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700 }}>
+                    <td>Totale</td>
+                    <td className="num mono">{Math.round(monthlyDiurno.reduce((s, v) => s + v, 0)).toLocaleString("it-IT")}</td>
+                    <td className="num mono">{Math.round(monthlyNotturno.reduce((s, v) => s + v, 0)).toLocaleString("it-IT")}</td>
+                    <td className="num mono">{Math.round(monthlyDiurno.reduce((s, v) => s + v, 0) + monthlyNotturno.reduce((s, v) => s + v, 0)).toLocaleString("it-IT")}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -1982,6 +2037,30 @@ function PrintReport({
           </tbody>
         </table>
 
+        <div className="pr-cols-2" style={{ marginTop: 6 }}>
+          <div>
+            <div className="pr-legend">
+              <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
+              <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
+            </div>
+            <PrintConsumptionChart diurno={monthlyDiurno} notturno={monthlyNotturno} />
+          </div>
+          <table className="pr-table" style={{ fontSize: 9.5, margin: 0 }}>
+            <thead>
+              <tr><th>Mese</th><th className="num">Diurno</th><th className="num">Nott.</th></tr>
+            </thead>
+            <tbody>
+              {MESI_BREVI.map((m, i) => (
+                <tr key={m}>
+                  <td>{m}</td>
+                  <td className="num">{Math.round(monthlyDiurno[i]).toLocaleString("it-IT")}</td>
+                  <td className="num">{Math.round(monthlyNotturno[i]).toLocaleString("it-IT")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <h3 className="pr-h3">Impianto e accumulo proposti</h3>
         <table className="pr-table">
           <tbody>
@@ -2238,6 +2317,40 @@ function PrintComboChart({ diurno, notturno, produzione }) {
   );
 }
 
+// Grafico dei soli consumi mensili (diurno impilato + notturno, senza
+// produzione) per il documento di stampa: stessa logica di PrintComboChart,
+// ma pensato per stare in metà pagina (vedi .pr-cols-2), affiancato alla
+// tabella con gli stessi valori — usato nella Sezione B, dove interessa
+// solo il consumo del cliente mese per mese.
+function PrintConsumptionChart({ diurno, notturno }) {
+  const width = 360;
+  const height = 140;
+  const totali = diurno.map((d, i) => d + (notturno[i] || 0));
+  const max = Math.max(...totali, 1);
+  const n = diurno.length;
+  const gap = 3;
+  const barW = (width - gap * (n - 1)) / n;
+  return (
+    <svg viewBox={`0 0 ${width} ${height + 18}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      {diurno.map((d, i) => {
+        const not = notturno[i] || 0;
+        const hDiu = (d / max) * height;
+        const hNot = (not / max) * height;
+        const x = i * (barW + gap);
+        return (
+          <g key={i}>
+            <rect x={x} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1} />
+            <rect x={x} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1} />
+            <text x={x + barW / 2} y={height + 13} textAnchor="middle" fontSize="7" fontFamily="IBM Plex Mono" fill="#7A857D">
+              {MESI_BREVI[i]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // Larghezze di colonna condivise da CashFlowTable e PrintCashFlowTable. La
 // Sezione D (a schermo) e la pagina corrispondente del PDF impilano più
 // tabelle in sequenza con contenuti di lunghezza diversa (una sola riga
@@ -2484,6 +2597,45 @@ function ComboChart({ diurno, notturno, produzione }) {
                   style={{ height: `${(p / max) * 100}%` }}
                   title={`${m} · produzione ${Math.round(p).toLocaleString("it-IT")} kWh`}
                 />
+              </div>
+              <div className="combo-month-label">{m}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Grafico dei soli consumi mensili (diurno impilato + notturno, senza
+// produzione): stessa logica/stile di ComboChart, usato nella card
+// "Riepilogo consumi" della Sezione B, dove interessa solo il consumo del
+// cliente mese per mese — affiancato alla tabella con gli stessi valori.
+function ConsumptionChart({ diurno, notturno }) {
+  const totali = diurno.map((d, i) => d + (notturno[i] || 0));
+  const max = Math.max(...totali, 1);
+  return (
+    <div>
+      <div className="combo-legend">
+        <LegendDot color="var(--c-f1)" label="Consumo diurno" />
+        <LegendDot color="var(--c-f3)" label="Consumo notturno" />
+      </div>
+      <div className="combo-chart">
+        {MESI_BREVI.map((m, i) => {
+          const d = diurno[i] || 0;
+          const n = notturno[i] || 0;
+          const totale = d + n;
+          return (
+            <div className="combo-month" key={m}>
+              <div className="combo-bars">
+                <div
+                  className="combo-bar-group"
+                  style={{ height: `${(totale / max) * 100}%` }}
+                  title={`${m} · consumo diurno ${Math.round(d).toLocaleString("it-IT")} kWh, notturno ${Math.round(n).toLocaleString("it-IT")} kWh`}
+                >
+                  <div style={{ flexGrow: n || 0, background: "var(--c-f3)" }} />
+                  <div style={{ flexGrow: d || 0, background: "var(--c-f1)" }} />
+                </div>
               </div>
               <div className="combo-month-label">{m}</div>
             </div>
