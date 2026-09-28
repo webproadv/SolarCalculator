@@ -22,35 +22,29 @@ async function requireAuthorizedUser() {
 // condiviso del team ("Pipe FTV", foglio "PIPE") — sempre un append, non
 // tocca mai le righe già presenti (vedi lib/googleSheets.js).
 //
-// Referente/cellulare/email non sono colonne della tabella `progetti` (non
-// servono al resto del preventivo): vengono chiesti al volo nel modale
-// "Pipe" della lista progetti, esattamente come già accade per il modale
-// "Prepara Alaska" in dashboard.
+// Referente/cellulare/email si inseriscono nello step "Consumi e spesa"
+// della dashboard (o, se lasciati vuoti lì, quando si genera il CSV
+// Noleggio) e si salvano col progetto: qui li leggiamo da `dati` invece di
+// richiederli di nuovo. Se un progetto più vecchio non li ha (salvato prima
+// di questo campo) o sono stati lasciati vuoti, la riga viene comunque
+// inviata con quelle colonne vuote, senza bloccare l'operazione.
 export async function POST(req, { params }) {
   const ctx = await requireAuthorizedUser();
   if (ctx.error) return ctx.error;
 
   const { id } = await params;
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Corpo della richiesta non valido." }, { status: 400 });
-  }
-
-  const { referente, cellulare, email } = body || {};
-  if (!referente?.trim() || !cellulare?.trim() || !email?.trim()) {
-    return NextResponse.json({ error: "Referente, cellulare ed email sono obbligatori." }, { status: 400 });
-  }
-
   const { data: p, error } = await supabaseAdmin()
     .from("progetti")
-    .select("created_at, ragione_sociale, comune, provincia, impianto_proposto_kwp, accumulo_proposto_kwh, costo_impianto_proposto")
+    .select("created_at, ragione_sociale, comune, provincia, impianto_proposto_kwp, accumulo_proposto_kwh, costo_impianto_proposto, dati")
     .eq("id", id)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!p) return NextResponse.json({ error: "Progetto non trovato." }, { status: 404 });
+
+  const referente = p.dati?.referente || "";
+  const cellulare = p.dati?.cellulare || "";
+  const email = p.dati?.email || "";
 
   // Formato italiano gg/mm/aaaa, sempre a due cifre e nel fuso orario
   // italiano: new Date(...).toLocaleDateString("it-IT") lascia giorno/mese

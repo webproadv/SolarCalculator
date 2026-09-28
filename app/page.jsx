@@ -329,10 +329,20 @@ export default function Page() {
   const [spesaAnnua, setSpesaAnnua] = useState("");
   // Potenza disponibile in immissione e fornitore attuale: non entrano nel
   // calcolo del preventivo (non vengono inviati a /api/quote), servono solo
-  // per precompilare automaticamente il CSV "Prepara Alaska" in dashboard
-  // (vedi Dashboard più sotto) senza doverli richiedere di nuovo lì.
+  // per precompilare automaticamente il CSV Noleggio in dashboard (vedi
+  // Dashboard più sotto) senza doverli richiedere di nuovo lì.
   const [potenzaDisponibile, setPotenzaDisponibile] = useState("");
   const [fornitore, setFornitore] = useState("");
+  // Referente, cellulare ed email dell'azienda: come potenza disponibile e
+  // fornitore, non entrano nel calcolo del preventivo — si memorizzano col
+  // progetto per non doverli richiedere di nuovo né per il CSV Noleggio né
+  // per l'invio a Pipe (vedi Dashboard più sotto). Facoltativi qui: se
+  // lasciati vuoti, il CSV Noleggio li richiede comunque al momento della
+  // generazione (come prima dell'introduzione di questi campi); Pipe invece
+  // usa quello che trova, senza mai chiederli.
+  const [referente, setReferente] = useState("");
+  const [cellulare, setCellulare] = useState("");
+  const [email, setEmail] = useState("");
   const [produzioneAnnuaFvKwh, setProduzioneAnnuaFvKwh] = useState("");
   const [giorniLavorativi, setGiorniLavorativi] = useState(5);
 
@@ -370,6 +380,9 @@ export default function Page() {
       if (saved.ocrMonthlyKwh) setOcrMonthlyKwh(saved.ocrMonthlyKwh);
       if (saved.potenzaDisponibile) setPotenzaDisponibile(saved.potenzaDisponibile);
       if (saved.fornitore) setFornitore(saved.fornitore);
+      if (saved.referente) setReferente(saved.referente);
+      if (saved.cellulare) setCellulare(saved.cellulare);
+      if (saved.email) setEmail(saved.email);
       // Foto satellitare salvata nello snapshot: senza questo la dashboard
       // riaperta su un progetto vecchio la mostrava vuota (andava rigenerata
       // dall'API esterna, che nel frattempo poteva anche restituire
@@ -986,6 +999,44 @@ export default function Page() {
                 </div>
               </div>
 
+              <div style={{ marginTop: 16, maxWidth: 640 }}>
+                <p className="hint" style={{ marginBottom: 8 }}>
+                  Facoltativi: se li lasci vuoti te li chiedo al momento di generare il CSV Noleggio; per l&apos;invio a Pipe invece li uso da qui, senza chiederteli di nuovo.
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div className="field">
+                    <label>Referente</label>
+                    <input
+                      type="text"
+                      placeholder="es. Mario Rossi"
+                      value={referente}
+                      disabled={editingBloccato}
+                      onChange={(e) => setReferente(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Cellulare</label>
+                    <input
+                      type="text"
+                      placeholder="es. 333 1234567"
+                      value={cellulare}
+                      disabled={editingBloccato}
+                      onChange={(e) => setCellulare(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      placeholder="es. mario.rossi@azienda.it"
+                      value={email}
+                      disabled={editingBloccato}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {bollettaMode === "foto" && (
                 <div className="btn-row" style={{ marginTop: 14 }}>
                   <span />
@@ -1074,6 +1125,14 @@ export default function Page() {
           ocrMonthlyKwh={ocrMonthlyKwh}
           potenzaDisponibile={potenzaDisponibile}
           fornitore={fornitore}
+          referente={referente}
+          cellulare={cellulare}
+          email={email}
+          onAggiornaContatti={(vals) => {
+            if (vals.referente !== undefined) setReferente(vals.referente);
+            if (vals.cellulare !== undefined) setCellulare(vals.cellulare);
+            if (vals.email !== undefined) setEmail(vals.email);
+          }}
           progettoId={progettoCaricato?.id}
           initialImpiantoProposto={progettoCaricato?.impiantoProposto}
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
@@ -1097,6 +1156,10 @@ function Dashboard({
   ocrMonthlyKwh,
   potenzaDisponibile,
   fornitore,
+  referente,
+  cellulare,
+  email,
+  onAggiornaContatti,
   progettoId,
   initialImpiantoProposto,
   initialAccumuloProposto,
@@ -1125,12 +1188,16 @@ function Dashboard({
     RATE_NOLEGGIO_OPTIONS.includes(Number(initialNumeroRateNoleggio)) ? Number(initialNumeroRateNoleggio) : 84
   );
 
-  // Esportazione CSV per il partner "Alaska" (vedi buildAlaskaCsv): prima
-  // di generare il file chiediamo solo i campi che l'app non raccoglie
-  // altrove (referente, cellulare, email). Potenza disponibile e fornitore
-  // attuale si inseriscono ora nello step "Consumi e spesa" (vedi
-  // potenzaDisponibile/fornitore ricevuti come prop) e vengono presi da lì
-  // automaticamente, senza richiederli di nuovo qui.
+  // Esportazione "CSV Noleggio" (formato richiesto dal partner Alaska, vedi
+  // buildAlaskaCsv): referente/cellulare/email si inseriscono ora nello
+  // step "Consumi e spesa" (vedi props) insieme a potenza disponibile e
+  // fornitore, e si salvano col progetto. Se sono già tutti compilati il
+  // CSV si genera subito, senza mostrare alcun modale; altrimenti il
+  // modale si apre precompilato con quello che già c'è, chiedendo solo
+  // quello che manca — come prima dell'introduzione di questi campi nello
+  // step Consumi. Quel che viene inserito nel modale si sincronizza anche
+  // in cima (onAggiornaContatti), così un successivo "Salva progetto" lo
+  // persiste e non verrà richiesto di nuovo (né qui né per Pipe).
   const [showAlaskaModal, setShowAlaskaModal] = useState(false);
   const [alaskaForm, setAlaskaForm] = useState({ referente: "", cellulare: "", email: "" });
   const [alaskaError, setAlaskaError] = useState("");
@@ -1139,9 +1206,23 @@ function Dashboard({
     setAlaskaForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  function generaCsvNoleggio() {
+    if (referente.trim() && cellulare.trim() && email.trim()) {
+      downloadAlaskaCsv({
+        company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
+        costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
+        ask: { referente, cellulare, email, potenzaDisponibile, fornitore },
+      });
+      return;
+    }
+    setAlaskaForm({ referente, cellulare, email });
+    setAlaskaError("");
+    setShowAlaskaModal(true);
+  }
+
   function confermaAlaska() {
-    const { referente, cellulare, email } = alaskaForm;
-    if (!referente.trim() || !cellulare.trim() || !email.trim()) {
+    const { referente: r, cellulare: c, email: e } = alaskaForm;
+    if (!r.trim() || !c.trim() || !e.trim()) {
       setAlaskaError("Compila tutti i campi prima di generare il CSV.");
       return;
     }
@@ -1150,6 +1231,7 @@ function Dashboard({
       costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
       ask: { ...alaskaForm, potenzaDisponibile, fornitore },
     });
+    onAggiornaContatti?.(alaskaForm);
     setAlaskaError("");
     setShowAlaskaModal(false);
   }
@@ -1168,6 +1250,7 @@ function Dashboard({
   function buildProjectPayload() {
     return {
       company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore,
+      referente, cellulare, email,
       impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages,
     };
   }
@@ -1296,7 +1379,7 @@ function Dashboard({
           </button>
         )}
         <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
-        <button className="btn btn-ghost" onClick={() => { setAlaskaError(""); setShowAlaskaModal(true); }}>📤 PREPARA ALASKA</button>
+        <button className="btn btn-ghost" onClick={generaCsvNoleggio}>📤 CSV Noleggio</button>
         <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
@@ -1305,9 +1388,9 @@ function Dashboard({
       {showAlaskaModal && (
         <div className="modal-overlay" onClick={() => setShowAlaskaModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Prepara CSV Alaska</h3>
+            <h3>CSV Noleggio</h3>
             <p className="modal-desc">
-              Questi dati non sono raccolti altrove nel preventivo: servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi (inclusi potenza disponibile e fornitore attuale, inseriti nello step Consumi) vengono presi automaticamente dal preventivo di {company.ragioneSociale}.
+              Mancano ancora questi dati (li avevi lasciati vuoti nello step Consumi): servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}. Quello che inserisci qui verrà ricordato: con "Salva progetto" non te lo richiederò più.
             </p>
             <div className="field">
               <label>Nome referente</label>

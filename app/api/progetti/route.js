@@ -51,7 +51,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "Corpo della richiesta non valido." }, { status: 400 });
   }
 
-  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages, nomeProgetto } = body || {};
+  const { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, referente, cellulare, email, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages, nomeProgetto } = body || {};
   if (!company || !quote) {
     return NextResponse.json({ error: "Dati mancanti: azienda e preventivo sono obbligatori." }, { status: 400 });
   }
@@ -72,7 +72,7 @@ export async function POST(req) {
     // inclusa la foto satellitare (roofImages), altrimenti riaprendo il
     // progetto sparirebbe (va rigenerata dalle API esterne, che potrebbero
     // nel frattempo restituire un'inquadratura diversa).
-    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages },
+    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, referente, cellulare, email, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages },
   };
 
   const { data, error } = await supabaseAdmin().from("progetti").insert(row).select("id").single();

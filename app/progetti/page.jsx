@@ -12,10 +12,9 @@ export default function ProgettiPage() {
 
   // "Pipe": invia un progetto come nuovo lead nel foglio Google Sheet
   // condiviso del team (vedi /api/progetti/[id]/pipe). Referente, cellulare
-  // ed email non sono salvati con il progetto: si chiedono al volo in un
-  // modale, come già avviene per "Prepara Alaska" in dashboard.
-  const [pipeTarget, setPipeTarget] = useState(null);
-  const [pipeForm, setPipeForm] = useState({ referente: "", cellulare: "", email: "" });
+  // ed email si inseriscono ormai nello step "Consumi e spesa" della
+  // dashboard e si salvano col progetto: qui non si richiedono più, il
+  // click invia subito la richiesta.
   const [pipeError, setPipeError] = useState("");
   const [pipingId, setPipingId] = useState(null);
   const [pipeSuccess, setPipeSuccess] = useState("");
@@ -51,35 +50,13 @@ export default function ProgettiPage() {
     }
   }
 
-  function apriModalePipe(progetto) {
-    setPipeTarget(progetto);
-    setPipeForm({ referente: "", cellulare: "", email: "" });
-    setPipeError("");
-  }
-
-  function updatePipeField(key, value) {
-    setPipeForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  async function confermaPipe() {
-    const { referente, cellulare, email } = pipeForm;
-    if (!referente.trim() || !cellulare.trim() || !email.trim()) {
-      setPipeError("Compila tutti i campi prima di inviare il lead.");
-      return;
-    }
-
-    const progetto = pipeTarget;
+  async function handlePipe(progetto) {
     setPipeError("");
     setPipingId(progetto.id);
     try {
-      const r = await fetch(`/api/progetti/${progetto.id}/pipe`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(pipeForm),
-      });
+      const r = await fetch(`/api/progetti/${progetto.id}/pipe`, { method: "POST" });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || "Errore durante l'invio a Pipe.");
-      setPipeTarget(null);
       setPipeSuccess(`Lead per "${progetto.ragione_sociale || progetto.nome_progetto || "il progetto"}" inviato a Pipe.`);
     } catch (err) {
       setPipeError(err.message);
@@ -109,40 +86,6 @@ export default function ProgettiPage() {
         </div>
       </div>
 
-      {pipeTarget && (
-        <div className="modal-overlay" onClick={() => setPipeTarget(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Invia a Pipe</h3>
-            <p className="modal-desc">
-              Aggiunge una riga al foglio lead del team con i dati di{" "}
-              {pipeTarget.ragione_sociale || pipeTarget.nome_progetto || "questo progetto"}. Referente, cellulare ed
-              email non sono salvati con il progetto: servono solo per questa riga.
-            </p>
-            <div className="field">
-              <label>Nome referente</label>
-              <input type="text" value={pipeForm.referente} onChange={(e) => updatePipeField("referente", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Cellulare</label>
-              <input type="text" value={pipeForm.cellulare} onChange={(e) => updatePipeField("cellulare", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input type="email" value={pipeForm.email} onChange={(e) => updatePipeField("email", e.target.value)} />
-            </div>
-            {pipeError && <div className="save-feedback error" style={{ marginBottom: 12 }}>{pipeError}</div>}
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setPipeTarget(null)} disabled={pipingId === pipeTarget.id}>
-                Annulla
-              </button>
-              <button className="btn btn-primary" onClick={confermaPipe} disabled={pipingId === pipeTarget.id}>
-                {pipingId === pipeTarget.id ? "Invio…" : "Invia lead"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="wrap" style={{ paddingTop: 32 }}>
         <h2 style={{ marginBottom: 4 }}>Progetti salvati</h2>
         <p className="card-note" style={{ marginBottom: 20 }}>
@@ -151,6 +94,7 @@ export default function ProgettiPage() {
 
         {error && <div className="error-box">{error}</div>}
         {deleteError && <div className="error-box">{deleteError}</div>}
+        {pipeError && <div className="error-box">{pipeError}</div>}
         {pipeSuccess && <div className="info-box">{pipeSuccess}</div>}
         {!progetti && !error && <p className="hint">Caricamento…</p>}
         {progetti && progetti.length === 0 && (
@@ -211,7 +155,7 @@ export default function ProgettiPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => apriModalePipe(p)}
+                          onClick={() => handlePipe(p)}
                           disabled={pipingId === p.id}
                         >
                           {pipingId === p.id ? "Invio…" : "Pipe"}
