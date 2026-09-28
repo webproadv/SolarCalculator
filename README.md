@@ -33,6 +33,8 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `GOOGLE_SHEETS_PRIVATE_KEY` | Chiave privata (PEM) dello stesso Service Account | Come sopra |
 | `GOOGLE_SHEETS_PIPE_SPREADSHEET_ID` | ID del foglio Google Sheet di destinazione (dalla URL, `.../spreadsheets/d/<ID>/edit...`) | Come sopra |
 | `GOOGLE_SHEETS_PIPE_SHEET_NAME` | Facoltativa, default `PIPE` — nome del foglio (tab) dentro il file in cui va aggiunta la riga | — |
+| `PDFOTTER_API_KEY` | API key [PDF Otter](https://pdfotter.github.io/slate/) usata dal bottone **"📄 PDF Noleggio"** in dashboard per riempire automaticamente il template PDF del contratto di noleggio — vedi sezione dedicata sotto | Il bottone "PDF Noleggio" mostra un errore ("Integrazione PDF Otter non configurata") invece di generare il PDF; il resto dell'app non ne risente |
+| `PDFOTTER_TEMPLATE_ID` | ID del template PDF Otter da riempire (es. `tem_...`, dalla URL del template su pdfotter.com) | Come sopra |
 
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase (archivio progetti + whitelist accessi) | L'app non si avvia in modo funzionante: salvataggio/recupero progetti e verifica accessi falliscono |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role Supabase (Settings → API), usata **solo lato server** nelle API route e nel middleware — non è mai esposta al browser | Come sopra |
@@ -61,6 +63,14 @@ Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva proge
 Il bottone **"Pipe"**, accanto a "Elimina" nella lista progetti, aggiunge subito una riga (sempre in append, mai una modifica alle righe esistenti) al foglio Google Sheet condiviso del team usato per tracciare i lead commerciali — senza chiedere nulla: azienda, città, potenza impianto/accumulo, valore offerta e data sono presi dal progetto salvato, referente/cellulare/email sono quelli inseriti nello step "Consumi e spesa" del preventivo (vedi sopra), la regione è derivata dalla provincia (`lib/provinceRegioni.js`) e lo stato trattativa è sempre impostato su "In Negoziazione". Se un progetto è stato salvato prima dell'introduzione di questi contatti, o li aveva lasciati vuoti, la riga viene comunque inviata con quelle colonne vuote.
 
 L'integrazione (`lib/googleSheets.js`) usa un Service Account Google (JWT firmato lato server, nessuna dipendenza esterna) e richiede: creare un Service Account su [Google Cloud Console](https://console.cloud.google.com/) con l'API Google Sheets abilitata, generarne una chiave JSON, condividere il foglio Google Sheet con l'email `...@...iam.gserviceaccount.com` del Service Account (permesso Editor), e impostare `GOOGLE_SHEETS_CLIENT_EMAIL` / `GOOGLE_SHEETS_PRIVATE_KEY` / `GOOGLE_SHEETS_PIPE_SPREADSHEET_ID` (vedi tabella sopra) con i valori del JSON scaricato.
+
+### CSV / PDF Noleggio (formato Alaska)
+
+In dashboard, i bottoni **"📤 CSV Noleggio"** e **"📄 PDF Noleggio"** generano gli stessi dati nel formato richiesto dal partner Alaska (noleggio operativo): il primo scarica il CSV a 71 colonne da caricare a mano su Alaska, il secondo compila direttamente — via [PDF Otter](https://pdfotter.github.io/slate/) — il modulo contrattuale PDF e lo scarica già pronto, senza passare dal caricamento manuale del CSV sul sito PDF Otter. I campi del template PDF Otter corrispondono 1:1 (stesso nome, stesso ordine) alle colonne del CSV — unica eccezione `pdf_otter_filename`, che è solo una colonna interna del CSV senza corrispondenza nel template — quindi i due bottoni condividono la stessa funzione di calcolo (`buildAlaskaCsvRow` in `app/page.jsx`) e restano sempre coerenti tra loro.
+
+Entrambi usano referente/cellulare/email inseriti nello step "Consumi e spesa": se mancano, un modale li richiede al momento del clic (come già succedeva per il solo CSV).
+
+L'integrazione (`lib/pdfOtter.js`) chiama l'endpoint "Fill in a PDF Template" di PDF Otter (Basic Auth, API key come username) e richiede: un account PDF Otter con il template del contratto già caricato (i nomi dei campi del template — leggibili con `GET /api/v1/pdf_templates/<id>`, che li elenca in un array `fields` — devono corrispondere ai nomi delle colonne in `ALASKA_HEADERS`), e le variabili d'ambiente `PDFOTTER_API_KEY` / `PDFOTTER_TEMPLATE_ID` (vedi tabella sopra).
 
 Lo schema del database si trova in `supabase/migrations/` (compatibile con l'integrazione GitHub di Supabase per la sincronizzazione automatica delle migrazioni: se collegata, basta un push su `main` per applicarlo; in alternativa va incollato manualmente nello SQL editor di Supabase).
 

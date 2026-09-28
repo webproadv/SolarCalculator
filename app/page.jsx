@@ -169,6 +169,22 @@ function buildAlaskaCsv(data) {
   return "﻿" + lines.join("\r\n") + "\r\n";
 }
 
+// Stessa riga del CSV Noleggio, ma come oggetto {nomeCampo: valore} invece
+// che come array posizionale: è il formato richiesto da /api/pdf-noleggio
+// per riempire il template PDF Otter del contratto di noleggio operativo,
+// i cui campi (verificati via GET /pdf_templates/<id>) corrispondono 1:1 ad
+// ALASKA_HEADERS — esclusa "pdf_otter_filename", che è solo una colonna
+// interna del CSV e non un campo del template.
+function buildAlaskaFieldMap(data) {
+  const row = buildAlaskaCsvRow(data);
+  const map = {};
+  ALASKA_HEADERS.forEach((header, i) => {
+    if (header === "pdf_otter_filename") return;
+    map[header] = row[i];
+  });
+  return map;
+}
+
 function downloadAlaskaCsv(data) {
   const csv = buildAlaskaCsv(data);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -1188,33 +1204,72 @@ function Dashboard({
     RATE_NOLEGGIO_OPTIONS.includes(Number(initialNumeroRateNoleggio)) ? Number(initialNumeroRateNoleggio) : 84
   );
 
-  // Esportazione "CSV Noleggio" (formato richiesto dal partner Alaska, vedi
-  // buildAlaskaCsv): referente/cellulare/email si inseriscono ora nello
-  // step "Consumi e spesa" (vedi props) insieme a potenza disponibile e
-  // fornitore, e si salvano col progetto. Se sono già tutti compilati il
-  // CSV si genera subito, senza mostrare alcun modale; altrimenti il
-  // modale si apre precompilato con quello che già c'è, chiedendo solo
-  // quello che manca — come prima dell'introduzione di questi campi nello
-  // step Consumi. Quel che viene inserito nel modale si sincronizza anche
-  // in cima (onAggiornaContatti), così un successivo "Salva progetto" lo
-  // persiste e non verrà richiesto di nuovo (né qui né per Pipe).
+  // Esportazione "CSV Noleggio" / "PDF Noleggio" (stesso formato dati,
+  // richiesto dal partner Alaska: vedi buildAlaskaCsv/buildAlaskaFieldMap).
+  // Referente/cellulare/email si inseriscono nello step "Consumi e spesa"
+  // (vedi props) insieme a potenza disponibile e fornitore, e si salvano
+  // col progetto. Se sono già tutti compilati, CSV o PDF si generano
+  // subito, senza mostrare alcun modale; altrimenti il modale si apre
+  // precompilato con quello che già c'è, chiedendo solo quello che manca —
+  // come prima dell'introduzione di questi campi nello step Consumi. Quel
+  // che viene inserito nel modale si sincronizza anche in cima
+  // (onAggiornaContatti), così un successivo "Salva progetto" lo persiste e
+  // non verrà richiesto di nuovo (né qui né per Pipe). `alaskaAzione`
+  // ricorda quale delle due operazioni completare alla conferma del modale.
   const [showAlaskaModal, setShowAlaskaModal] = useState(false);
+  const [alaskaAzione, setAlaskaAzione] = useState("csv"); // "csv" | "pdf"
   const [alaskaForm, setAlaskaForm] = useState({ referente: "", cellulare: "", email: "" });
-  const [alaskaError, setAlaskaError] = useState("");
+  const [alaskaError, setAlaskaError] = useState(""); // errore di validazione del modale
+  const [pdfNoleggioLoading, setPdfNoleggioLoading] = useState(false);
+  const [noleggioError, setNoleggioError] = useState(""); // errore di generazione CSV/PDF (mostrato fuori dal modale, che a quel punto è già chiuso)
 
   function updateAlaskaField(key, value) {
     setAlaskaForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function generaCsvNoleggio() {
-    if (referente.trim() && cellulare.trim() && email.trim()) {
-      downloadAlaskaCsv({
-        company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
-        costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
-        ask: { referente, cellulare, email, potenzaDisponibile, fornitore },
+  async function generaPdfNoleggio(data) {
+    setNoleggioError("");
+    setPdfNoleggioLoading(true);
+    try {
+      const r = await fetch("/api/pdf-noleggio", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fields: buildAlaskaFieldMap(data) }),
       });
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}));
+        throw new Error(errData.error || "Errore nella generazione del PDF Noleggio.");
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const nomeFile = (data.company.ragioneSociale || "azienda").trim().replace(/[^a-z0-9]+/gi, "_");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Noleggio_${nomeFile}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setNoleggioError(err.message);
+    } finally {
+      setPdfNoleggioLoading(false);
+    }
+  }
+
+  function eseguiAzioneNoleggio(azione) {
+    setNoleggioError("");
+    const dati = {
+      company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
+      costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
+    };
+    if (referente.trim() && cellulare.trim() && email.trim()) {
+      const data = { ...dati, ask: { referente, cellulare, email, potenzaDisponibile, fornitore } };
+      if (azione === "pdf") generaPdfNoleggio(data);
+      else downloadAlaskaCsv(data);
       return;
     }
+    setAlaskaAzione(azione);
     setAlaskaForm({ referente, cellulare, email });
     setAlaskaError("");
     setShowAlaskaModal(true);
@@ -1223,17 +1278,19 @@ function Dashboard({
   function confermaAlaska() {
     const { referente: r, cellulare: c, email: e } = alaskaForm;
     if (!r.trim() || !c.trim() || !e.trim()) {
-      setAlaskaError("Compila tutti i campi prima di generare il CSV.");
+      setAlaskaError(`Compila tutti i campi prima di generare il ${alaskaAzione === "pdf" ? "PDF" : "CSV"}.`);
       return;
     }
-    downloadAlaskaCsv({
+    const data = {
       company, quote, econ, noleggio, numeroRateNoleggio, kwp, batteriaKwh,
       costoImpianto, produzioneAnnuaTotaleKwh, autoconsumoPct, pannelliStimati,
       ask: { ...alaskaForm, potenzaDisponibile, fornitore },
-    });
+    };
     onAggiornaContatti?.(alaskaForm);
     setAlaskaError("");
     setShowAlaskaModal(false);
+    if (alaskaAzione === "pdf") generaPdfNoleggio(data);
+    else downloadAlaskaCsv(data);
   }
 
   // Salvataggio su Supabase (tabella `progetti`). Il primo salvataggio di un
@@ -1379,18 +1436,23 @@ function Dashboard({
           </button>
         )}
         <button className="btn btn-ghost" onClick={() => window.print()}>🖨️ Stampa preventivo</button>
-        <button className="btn btn-ghost" onClick={generaCsvNoleggio}>📤 CSV Noleggio</button>
+        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("csv")}>📤 CSV Noleggio</button>
+        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
+          {pdfNoleggioLoading && <span className="spinner" />}
+          📄 PDF Noleggio
+        </button>
         <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
+        {noleggioError && <span className="save-feedback error">{noleggioError}</span>}
       </div>
 
       {showAlaskaModal && (
         <div className="modal-overlay" onClick={() => setShowAlaskaModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>CSV Noleggio</h3>
+            <h3>{alaskaAzione === "pdf" ? "PDF Noleggio" : "CSV Noleggio"}</h3>
             <p className="modal-desc">
-              Mancano ancora questi dati (li avevi lasciati vuoti nello step Consumi): servono per completare il CSV nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}. Quello che inserisci qui verrà ricordato: con "Salva progetto" non te lo richiederò più.
+              Mancano ancora questi dati (li avevi lasciati vuoti nello step Consumi): servono per completare il {alaskaAzione === "pdf" ? "PDF" : "CSV"} nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}. Quello che inserisci qui verrà ricordato: con "Salva progetto" non te lo richiederò più.
             </p>
             <div className="field">
               <label>Nome referente</label>
@@ -1407,7 +1469,9 @@ function Dashboard({
             {alaskaError && <div className="save-feedback error" style={{ marginBottom: 12 }}>{alaskaError}</div>}
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowAlaskaModal(false)}>Annulla</button>
-              <button className="btn btn-primary" onClick={confermaAlaska}>Genera CSV</button>
+              <button className="btn btn-primary" onClick={confermaAlaska}>
+                {alaskaAzione === "pdf" ? "Genera PDF" : "Genera CSV"}
+              </button>
             </div>
           </div>
         </div>
