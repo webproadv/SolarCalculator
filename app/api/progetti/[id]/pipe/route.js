@@ -52,7 +52,17 @@ export async function POST(req, { params }) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!p) return NextResponse.json({ error: "Progetto non trovato." }, { status: 404 });
 
-  const dataInvio = new Date(p.created_at).toLocaleDateString("it-IT");
+  // Formato italiano gg/mm/aaaa, sempre a due cifre e nel fuso orario
+  // italiano: new Date(...).toLocaleDateString("it-IT") lascia giorno/mese
+  // senza lo zero iniziale (es. "5/9/2026" invece di "05/09/2026"), che
+  // Google Sheets può interpretare o visualizzare in modo incoerente con le
+  // altre date del foglio (già in formato gg/mm/aaaa a due cifre).
+  const dataInvio = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(p.created_at));
   const haAccumulo = Number(p.accumulo_proposto_kwh) > 0;
 
   // Colonne nell'ordine esatto del foglio "PIPE":
@@ -80,7 +90,11 @@ export async function POST(req, { params }) {
   ];
 
   try {
-    await appendPipeRow(row);
+    // Indice 13 = colonna N = VALORE OFF: la mandiamo come numero (non una
+    // stringa "€ ...", che romperebbe eventuali somme/formule sulla
+    // colonna) e chiediamo di formattarla come valuta subito dopo l'append,
+    // così in foglio appare "€ 15.000,00" invece di "15000".
+    await appendPipeRow(row, { currencyColumnIndexes: [13] });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 502 });
   }

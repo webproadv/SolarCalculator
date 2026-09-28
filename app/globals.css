@@ -229,15 +229,14 @@ th.num{ text-align:right; }
 /* Lista "I miei progetti" (app/progetti/page.jsx): tabella con molte
    colonne + fino a 3 bottoni azione per riga — senza queste regole, su
    schermi non larghissimi testo e bottoni si accavallano/vanno a capo in
-   modo disordinato. th/td non vanno a capo (nowrap); le colonne con testo
-   potenzialmente lungo (ragione sociale, email di chi ha salvato) troncano
-   con ellissi invece di allargare la riga; i bottoni azione sono più
-   compatti (.btn-sm) e possono comunque andare a capo in coppia se proprio
-   non c'è spazio, invece di spingere il resto della tabella fuori schermo
-   (che resta comunque scorrevole orizzontalmente grazie a .table-wrap).  */
+   modo disordinato. Niente va mai a capo (nowrap ovunque, azioni comprese):
+   le colonne con testo potenzialmente lungo (ragione sociale, email di chi
+   ha salvato) troncano con ellissi invece di allargare la riga o mandare a
+   capo i bottoni; se la riga nel suo insieme non entra comunque nello
+   schermo, la tabella scorre in orizzontale (.table-wrap). */
 .progetti-table th, .progetti-table td{ white-space:nowrap; }
 .progetti-table td.truncate{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-.progetti-actions{ display:flex; flex-wrap:wrap; gap:6px; }
+.progetti-actions{ display:flex; flex-wrap:nowrap; gap:6px; }
 
 .seg-swatch{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px; }
 
