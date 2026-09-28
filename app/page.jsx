@@ -2037,28 +2037,12 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-cols-2" style={{ marginTop: 6 }}>
-          <div>
-            <div className="pr-legend">
-              <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
-              <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
-            </div>
-            <PrintConsumptionChart diurno={monthlyDiurno} notturno={monthlyNotturno} />
+        <div style={{ marginTop: 6 }}>
+          <div className="pr-legend">
+            <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
+            <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
           </div>
-          <table className="pr-table" style={{ fontSize: 9.5, margin: 0 }}>
-            <thead>
-              <tr><th>Mese</th><th className="num">Diurno</th><th className="num">Nott.</th></tr>
-            </thead>
-            <tbody>
-              {MESI_BREVI.map((m, i) => (
-                <tr key={m}>
-                  <td>{m}</td>
-                  <td className="num">{Math.round(monthlyDiurno[i]).toLocaleString("it-IT")}</td>
-                  <td className="num">{Math.round(monthlyNotturno[i]).toLocaleString("it-IT")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <PrintConsumptionChart diurno={monthlyDiurno} notturno={monthlyNotturno} />
         </div>
 
         <h3 className="pr-h3">Impianto e accumulo proposti</h3>
@@ -2319,19 +2303,18 @@ function PrintComboChart({ diurno, notturno, produzione }) {
 
 // Grafico dei soli consumi mensili (diurno impilato + notturno, senza
 // produzione) per il documento di stampa: stessa logica di PrintComboChart,
-// ma pensato per stare in metà pagina (vedi .pr-cols-2), affiancato alla
-// tabella con gli stessi valori — usato nella Sezione B, dove interessa
-// solo il consumo del cliente mese per mese.
+// ma senza produzione — usato nella Sezione B, a piena larghezza, dove
+// interessa solo il consumo del cliente mese per mese.
 function PrintConsumptionChart({ diurno, notturno }) {
-  const width = 360;
-  const height = 140;
+  const width = 760;
+  const height = 150;
   const totali = diurno.map((d, i) => d + (notturno[i] || 0));
   const max = Math.max(...totali, 1);
   const n = diurno.length;
-  const gap = 3;
+  const gap = 6;
   const barW = (width - gap * (n - 1)) / n;
   return (
-    <svg viewBox={`0 0 ${width} ${height + 18}`} style={{ width: "100%", height: "auto", display: "block" }}>
+    <svg viewBox={`0 0 ${width} ${height + 22}`} style={{ width: "100%", height: "auto", display: "block" }}>
       {diurno.map((d, i) => {
         const not = notturno[i] || 0;
         const hDiu = (d / max) * height;
@@ -2339,9 +2322,9 @@ function PrintConsumptionChart({ diurno, notturno }) {
         const x = i * (barW + gap);
         return (
           <g key={i}>
-            <rect x={x} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1} />
-            <rect x={x} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1} />
-            <text x={x + barW / 2} y={height + 13} textAnchor="middle" fontSize="7" fontFamily="IBM Plex Mono" fill="#7A857D">
+            <rect x={x} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1.5} />
+            <rect x={x} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1.5} />
+            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
               {MESI_BREVI[i]}
             </text>
           </g>
