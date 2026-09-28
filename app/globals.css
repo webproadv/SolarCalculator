@@ -353,7 +353,19 @@ th.num{ text-align:right; }
     line-height:1.5;
   }
 
-  .pr-page{ break-after:page; }
+  /* Ogni pagina occupa sempre l'intera area stampabile (A4 meno i margini
+     di @page, 297mm - 16mm - 16mm) e dispone i suoi contenuti in colonna:
+     così il footer (ultimo figlio, vedi .pr-footer) viene sempre spinto in
+     fondo alla pagina fisica con margin-top:auto, invece di fermarsi subito
+     dopo il contenuto — che su pagine con poco testo lo faceva apparire a
+     metà pagina invece che in fondo, e in modo incoerente da pagina a
+     pagina. */
+  .pr-page{
+    break-after:page;
+    min-height:265mm;
+    display:flex;
+    flex-direction:column;
+  }
   .pr-page:last-child{ break-after:auto; }
 
   .pr-running-header{
@@ -364,7 +376,8 @@ th.num{ text-align:right; }
   .pr-footer{
     display:flex; justify-content:space-between;
     font-family:"IBM Plex Mono", monospace; font-size:9px; color:#7A857D;
-    border-top:1px solid #D8DCD3; padding-top:6px; margin-top:22px;
+    border-top:1px solid #D8DCD3; padding-top:6px;
+    margin-top:auto; /* spinge il footer in fondo a .pr-page (flex column) */
   }
 
   .pr-eyebrow{ font-family:"IBM Plex Mono", monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#B8791F; font-weight:600; margin-bottom:8px; }

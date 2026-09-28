@@ -1794,6 +1794,8 @@ function PrintReport({
             <p className="pr-note" style={{ marginTop: 0 }}>Superficie disponibile e impianto proposto</p>
             <table className="pr-table">
               <tbody>
+                <tr><td>Producibilità specifica del sito</td><td className="num">{quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp/anno</td></tr>
+                <tr><td>Produzione annua totale stimata</td><td className="num">{Math.round(produzioneAnnuaTotaleKwh).toLocaleString("it-IT")} kWh</td></tr>
                 <tr><td>Superficie utile rilevata sul tetto</td><td className="num">{quote.roof.maxArrayAreaMeters2 ? `${Math.round(quote.roof.maxArrayAreaMeters2).toLocaleString("it-IT")} m²` : "n/d"}</td></tr>
                 <tr><td>Pannelli massimi installabili (stima Google)</td><td className="num">{quote.roof.maxArrayPanelsCount || "n/d"}</td></tr>
                 <tr><td>Pannelli dell&apos;impianto proposto</td><td className="num">{pannelliStimati}</td></tr>
