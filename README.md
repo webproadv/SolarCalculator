@@ -29,6 +29,10 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `OPENAPI_KEY` | Lookup ragione sociale/indirizzo da Partita IVA (openapi.com) — fallback se `APIFY_API_TOKEN` non è configurato | Usa un&apos;azienda di esempio con la P.IVA che hai inserito |
 | `ANTHROPIC_API_KEY` | Lettura automatica del grafico F1/F2/F3 dalla foto bolletta (Claude Vision) | L&apos;utente inserisce le percentuali manualmente con gli slider |
 | `ANTHROPIC_MODEL` | Facoltativa, default `claude-sonnet-4-5-20250929` (più accurato di un modello Haiku nel leggere bollette con layout e grafici molto variabili) | — |
+| `GOOGLE_SHEETS_CLIENT_EMAIL` | Email del Service Account Google usato dal bottone **"📤 Pipe"** (lista progetti) per aggiungere righe al foglio lead del team — vedi sezione dedicata sotto | Il bottone "Pipe" mostra un errore ("Integrazione Google Sheets non configurata") invece di inviare il lead; il resto dell'app non ne risente |
+| `GOOGLE_SHEETS_PRIVATE_KEY` | Chiave privata (PEM) dello stesso Service Account | Come sopra |
+| `GOOGLE_SHEETS_PIPE_SPREADSHEET_ID` | ID del foglio Google Sheet di destinazione (dalla URL, `.../spreadsheets/d/<ID>/edit...`) | Come sopra |
+| `GOOGLE_SHEETS_PIPE_SHEET_NAME` | Facoltativa, default `PIPE` — nome del foglio (tab) dentro il file in cui va aggiunta la riga | — |
 
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase (archivio progetti + whitelist accessi) | L'app non si avvia in modo funzionante: salvataggio/recupero progetti e verifica accessi falliscono |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role Supabase (Settings → API), usata **solo lato server** nelle API route e nel middleware — non è mai esposta al browser | Come sopra |
@@ -50,7 +54,13 @@ L'app è protetta da autenticazione: **nessuna pagina è raggiungibile senza ave
    insert into public.authorized_emails (email, note) values ('nome.cognome@lenergy.it', 'Commerciale');
    ```
 
-Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva progetto"** in dashboard: viene creata una riga nella tabella Supabase `progetti`, con uno snapshot completo di azienda, preventivo, consumi mensili e valori proposti (impianto, accumulo, costo) — pensato anche per la futura funzione di stampa PDF, che potrà leggere questi stessi dati senza richiamare di nuovo le API esterne. La pagina **"📂 I miei progetti"** (in alto, sempre visibile) elenca tutti i progetti salvati da chiunque sia autorizzato — è un archivio condiviso di lavoro, non separato per singolo utente — e permette di riaprirli in dashboard con i valori con cui erano stati salvati.
+Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva progetto"** in dashboard: viene creata una riga nella tabella Supabase `progetti`, con uno snapshot completo di azienda, preventivo, consumi mensili e valori proposti (impianto, accumulo, costo) — pensato anche per la futura funzione di stampa PDF, che potrà leggere questi stessi dati senza richiamare di nuovo le API esterne. La pagina **"📂 I miei progetti"** (in alto, sempre visibile) elenca tutti i progetti salvati da chiunque sia autorizzato — è un archivio condiviso di lavoro, non separato per singolo utente — e permette di riaprirli in dashboard con i valori con cui erano stati salvati, eliminarli definitivamente (**"Elimina"**) o inviarli come nuovo lead al foglio del team (**"📤 Pipe"**, vedi sotto).
+
+### Invio lead a Google Sheets ("📤 Pipe")
+
+Il bottone **"📤 Pipe"**, accanto a "Elimina" nella lista progetti, aggiunge una riga (sempre in append, mai una modifica alle righe esistenti) al foglio Google Sheet condiviso del team usato per tracciare i lead commerciali. Referente, cellulare ed email — non raccolti altrove nel preventivo — vengono chiesti al volo in un modale, come già avviene per "Prepara Alaska"; gli altri campi (azienda, città, potenza impianto/accumulo, valore offerta, data) sono presi dal progetto salvato, la regione è derivata dalla provincia (`lib/provinceRegioni.js`) e lo stato trattativa è sempre impostato su "In Negoziazione".
+
+L'integrazione (`lib/googleSheets.js`) usa un Service Account Google (JWT firmato lato server, nessuna dipendenza esterna) e richiede: creare un Service Account su [Google Cloud Console](https://console.cloud.google.com/) con l'API Google Sheets abilitata, generarne una chiave JSON, condividere il foglio Google Sheet con l'email `...@...iam.gserviceaccount.com` del Service Account (permesso Editor), e impostare `GOOGLE_SHEETS_CLIENT_EMAIL` / `GOOGLE_SHEETS_PRIVATE_KEY` / `GOOGLE_SHEETS_PIPE_SPREADSHEET_ID` (vedi tabella sopra) con i valori del JSON scaricato.
 
 Lo schema del database si trova in `supabase/migrations/` (compatibile con l'integrazione GitHub di Supabase per la sincronizzazione automatica delle migrazioni: se collegata, basta un push su `main` per applicarlo; in alternativa va incollato manualmente nello SQL editor di Supabase).
 
