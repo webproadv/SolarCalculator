@@ -7,6 +7,8 @@ import { UserButton } from "@clerk/nextjs";
 export default function ProgettiPage() {
   const [progetti, setProgetti] = useState(null);
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     fetch("/api/progetti")
@@ -17,6 +19,27 @@ export default function ProgettiPage() {
       })
       .catch((err) => setError(err.message));
   }, []);
+
+  // Elimina definitivamente un progetto dal database (riga "progetti" su
+  // Supabase): azione irreversibile, quindi richiede conferma esplicita
+  // prima della chiamata DELETE a /api/progetti/[id].
+  async function handleElimina(progetto) {
+    const nome = progetto.ragione_sociale || progetto.nome_progetto || "questo progetto";
+    if (!window.confirm(`Eliminare definitivamente "${nome}"? L'operazione non è reversibile.`)) return;
+
+    setDeleteError("");
+    setDeletingId(progetto.id);
+    try {
+      const r = await fetch(`/api/progetti/${progetto.id}`, { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "Errore durante l'eliminazione del progetto.");
+      setProgetti((prev) => prev.filter((p) => p.id !== progetto.id));
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <>
@@ -46,6 +69,7 @@ export default function ProgettiPage() {
         </p>
 
         {error && <div className="error-box">{error}</div>}
+        {deleteError && <div className="error-box">{deleteError}</div>}
         {!progetti && !error && <p className="hint">Caricamento…</p>}
         {progetti && progetti.length === 0 && (
           <div className="card">
@@ -90,9 +114,20 @@ export default function ProgettiPage() {
                     </td>
                     <td style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>{p.creato_da_email || "—"}</td>
                     <td>
-                      <Link href={`/?progetto=${p.id}`} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 13 }}>
-                        Apri
-                      </Link>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <Link href={`/?progetto=${p.id}`} className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 13 }}>
+                          Apri
+                        </Link>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          style={{ padding: "6px 14px", fontSize: 13 }}
+                          onClick={() => handleElimina(p)}
+                          disabled={deletingId === p.id}
+                        >
+                          {deletingId === p.id ? "Eliminazione…" : "Elimina"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
