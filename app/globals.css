@@ -224,19 +224,32 @@ td{ padding:9px 10px; border-bottom:1px solid var(--border); }
 tr:last-child td{ border-bottom:none; }
 td.num{ text-align:right; font-family:"IBM Plex Mono"; }
 th.num{ text-align:right; }
-.table-wrap{ overflow-x:auto; }
-
-/* Lista "I miei progetti" (app/progetti/page.jsx): tabella con molte
-   colonne + fino a 3 bottoni azione per riga — senza queste regole, su
-   schermi non larghissimi testo e bottoni si accavallano/vanno a capo in
-   modo disordinato. Niente va mai a capo (nowrap ovunque, azioni comprese):
-   le colonne con testo potenzialmente lungo (ragione sociale, email di chi
-   ha salvato) troncano con ellissi invece di allargare la riga o mandare a
-   capo i bottoni; se la riga nel suo insieme non entra comunque nello
-   schermo, la tabella scorre in orizzontale (.table-wrap). */
-.progetti-table th, .progetti-table td{ white-space:nowrap; }
-.progetti-table td.truncate{ max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-.progetti-actions{ display:flex; flex-wrap:nowrap; gap:6px; }
+/* Lista "I miei progetti" (app/progetti/page.jsx): tabella con 7 colonne
+   dati + azioni — deve stare SEMPRE interamente visibile, senza barra di
+   scorrimento orizzontale (niente .table-wrap/overflow-x qui, a differenza
+   di altre tabelle del sito). Per garantirlo: table-layout:fixed con una
+   larghezza percentuale fissa per ogni colonna (così le colonne non si
+   allargano mai oltre il contenitore), testo che non va mai a capo
+   (nowrap ovunque, azioni comprese) e, se una cella non ci sta, tronca con
+   ellissi invece di spingere la tabella oltre lo schermo. Carattere e
+   padding ridotti apposta per far stare tutto senza scroll. */
+.progetti-table-wrap{ width:100%; }
+.progetti-table{ table-layout:fixed; width:100%; font-size:12px; }
+.progetti-table th, .progetti-table td{
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  padding:7px 8px;
+}
+.progetti-table th:last-child, .progetti-table td:last-child{ overflow:visible; }
+.progetti-table th:nth-child(1), .progetti-table td:nth-child(1){ width:21%; }
+.progetti-table th:nth-child(2), .progetti-table td:nth-child(2){ width:10%; }
+.progetti-table th:nth-child(3), .progetti-table td:nth-child(3){ width:14%; }
+.progetti-table th:nth-child(4), .progetti-table td:nth-child(4){ width:9%; }
+.progetti-table th:nth-child(5), .progetti-table td:nth-child(5){ width:9%; }
+.progetti-table th:nth-child(6), .progetti-table td:nth-child(6){ width:11%; }
+.progetti-table th:nth-child(7), .progetti-table td:nth-child(7){ width:9%; }
+.progetti-table th:nth-child(8), .progetti-table td:nth-child(8){ width:17%; }
+.progetti-actions{ display:flex; flex-wrap:nowrap; gap:4px; }
+.progetti-actions .btn-sm{ padding:4px 8px; font-size:11.5px; }
 
 .seg-swatch{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px; }
 
