@@ -186,6 +186,110 @@ function buildAlaskaFieldMap(data) {
   return map;
 }
 
+// Campi del template PDF Otter "PDF Acquisto" (acquisto diretto), nell'ordine
+// della mappatura fornita: i nomi sono quelli del template. Valori fissi
+// scritti così come sono; quelli "da calcolare" vengono dal preventivo, con le
+// stesse formule del CSV/PDF Noleggio. Campi senza fonte disponibile (Pec,
+// Iban, Sdi, ecc.) restano vuoti, come "vant" che nella mappatura non ha valore.
+const ACQUISTO_HEADERS = [
+  "Azienda", "via", "cap", "citta", "protocollo", "data", "account", "cell",
+  "referente", "ragione sociale", "piva", "cell2", "codfis", "cellulare ref",
+  "indaz", "telaz", "telref", "indref", "praz", "comaz", "comref", "capaz",
+  "prref", "capref", "mailaz", "mailref", "pec", "iban", "sdi", "cen", "impen",
+  "prene", "consu", "spesaen", "potd", "gest", "tens", "day", "aum", "istat",
+  "gsemin", "pot", "proda", "autoc", "co2", "alb", "nummod", "inverter", "kit",
+  "strutture", "cavi", "capbat", "numbat", "batinc", "accum", "wall", "walinc",
+  "totale", "rispnb", "ricgse", "riccer", "benef", "payback", "irr", "lcoe",
+  "risp25", "vant",
+];
+
+function buildAcquistoFieldMap({
+  company, quote, econ, kwp, batteriaKwh, costoImpianto, produzioneAnnuaTotaleKwh,
+  autoconsumoPct, pannelliStimati, payback, ask,
+}) {
+  const oggi = new Date().toLocaleDateString("it-IT");
+  const consumoAnnuoKwh = quote.input.consumoAnnuoKwh || 0;
+  const kgCo2 = produzioneAnnuaTotaleKwh * 0.535;
+  const numeroBatterie = batteriaKwh > 0 ? Math.ceil(batteriaKwh / 5) : 0;
+  const beneficio = econ.risparmioBolletta + econ.ricavoGSE + econ.ricavoCER;
+
+  const row = [
+    company.ragioneSociale,                         // Azienda
+    company.indirizzo,                               // via
+    company.cap,                                     // cap
+    company.comune,                                  // citta
+    "",                                              // protocollo
+    oggi,                                            // data
+    "Dott. Maurizio Galli",                         // account
+    "+39 3391860201",                                // cell
+    ask.referente,                                   // referente
+    company.ragioneSociale,                          // ragione sociale
+    company.piva,                                    // piva
+    ask.cellulare,                                   // cell2
+    "",                                              // codfis
+    ask.cellulare,                                   // cellulare ref
+    company.indirizzo,                               // indaz
+    "",                                              // telaz
+    "",                                              // telref
+    company.indirizzo,                               // indref
+    company.provincia,                               // praz
+    company.comune,                                  // comaz
+    company.comune,                                  // comref
+    company.cap,                                     // capaz
+    company.provincia,                               // prref
+    company.cap,                                     // capref
+    ask.email,                                       // mailaz
+    ask.email,                                       // mailref
+    "",                                              // pec (nessuna fonte disponibile)
+    "",                                              // iban
+    "",                                              // sdi
+    fmtNumIt(consumoAnnuoKwh, 0),                    // cen ("CONSUMO TOTALE KW")
+    fmtNumIt(econ.spesaAnnuaNetta, 2),               // impen ("SPESA ANNUA IVA ESCLUSA")
+    fmtNumIt(econ.prezzoMedio, 2),                   // prene ("COSTO KW IVA ESCLUSA")
+    fmtNumIt(consumoAnnuoKwh * 25, 0),               // consu ("CONSUMO KW ANNUI*25")
+    fmtNumIt(econ.spesaAnnuaNetta * 41.625, 2),      // spesaen ("SPESA ANNUA IVA ESCLUSA*41,625")
+    fmtNumIt(ask.potenzaDisponibile, 1),             // potd ("POTENZA DISPONIBILE")
+    ask.fornitore,                                   // gest ("FORNITORE")
+    "380",                                           // tens
+    fmtNumIt(quote.input.giorniLavorativi, 0),       // day ("GIORNI LAVORATIVI")
+    "4%",                                            // aum
+    "1,50%",                                         // istat
+    "0,04",                                          // gsemin
+    fmtNumIt(kwp, 2),                                // pot ("POTENZA IMPIANTO PROPOSTA")
+    fmtNumIt(produzioneAnnuaTotaleKwh, 0),           // proda ("PRODUZIONE ANNUA IMPIANTO")
+    `${fmtNumIt(autoconsumoPct, 1)}%`,               // autoc ("AUTOCONSUMO")
+    fmtNumIt(kgCo2, 0),                              // co2 ("PRODUZIONE ANNUA IMPIANTO *0,535")
+    fmtNumIt(kgCo2 / 30, 0),                         // alb ("PRODUZIONE ANNUA IMPIANTO *0,535/30")
+    fmtNumIt(pannelliStimati, 0),                    // nummod ("NUMERO PANNELLI DA INSTALLARE")
+    "1",                                             // inverter
+    "INCLUSO",                                       // kit
+    "A CORPO",                                       // strutture
+    "A CORPO",                                       // cavi
+    "5",                                             // capbat
+    fmtNumIt(numeroBatterie, 0),                     // numbat ("POTENZA BATTERIE/5")
+    "INCLUSO",                                       // batinc
+    batteriaKwh > 0 ? `-${fmtNumIt(batteriaKwh, 0)}` : "", // accum ("-" + "ACCUMULO DA INSTALLARE KW"; vuoto se senza accumulo)
+    "",                                              // wall
+    "",                                              // walinc
+    fmtNumIt(costoImpianto, 2),                      // totale ("IMPORTO IMPIANTO")
+    fmtNumIt(econ.risparmioBolletta, 2),             // rispnb ("RISPARMIO BOLLETTA")
+    fmtNumIt(econ.ricavoGSE, 2),                     // ricgse ("RICAVO GSE")
+    fmtNumIt(econ.ricavoCER, 2),                     // riccer ("RICAVO CER")
+    fmtNumIt(beneficio, 2),                          // benef ("RISPARMIO BOLLETTA+GSE+CER")
+    payback == null ? "" : fmtNumIt(payback, 1),     // payback ("PAYBACK STIMATO ANNI")
+    "ANNI",                                          // irr
+    "0,02",                                          // lcoe
+    fmtNumIt(beneficio * 27, 2),                     // risp25 ("(RISPARMIO BOLLETTA+GSE+CER)*27")
+    "",                                              // vant (nessun valore nella mappatura)
+  ];
+
+  const map = {};
+  ACQUISTO_HEADERS.forEach((header, i) => {
+    map[header] = row[i];
+  });
+  return map;
+}
+
 function downloadAlaskaCsv(data) {
   const csv = buildAlaskaCsv(data);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -1309,6 +1413,7 @@ function Dashboard({
   const [alaskaForm, setAlaskaForm] = useState({ referente: "", cellulare: "", email: "" });
   const [alaskaError, setAlaskaError] = useState(""); // errore di validazione del modale
   const [pdfNoleggioLoading, setPdfNoleggioLoading] = useState(false);
+  const [pdfAcquistoLoading, setPdfAcquistoLoading] = useState(false);
   const [noleggioError, setNoleggioError] = useState(""); // errore di generazione CSV/PDF (mostrato fuori dal modale, che a quel punto è già chiuso)
 
   function updateAlaskaField(key, value) {
@@ -1364,6 +1469,45 @@ function Dashboard({
     }
   }
 
+  // "PDF Acquisto": stesso meccanismo del PDF Noleggio ma sul template della
+  // proposta di acquisto diretto (/api/pdf-acquisto, mappatura in
+  // buildAcquistoFieldMap), nome file "Proposta acquisto <azienda>".
+  async function generaPdfAcquisto(data) {
+    setNoleggioError("");
+    setPdfAcquistoLoading(true);
+    try {
+      const r = await fetch("/api/pdf-acquisto", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fields: buildAcquistoFieldMap({ ...data, payback }) }),
+      });
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}));
+        throw new Error(errData.error || "Errore nella generazione del PDF Acquisto.");
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${pdfDownloadFilename("Proposta acquisto", data.company.ragioneSociale)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setNoleggioError(err.message);
+    } finally {
+      setPdfAcquistoLoading(false);
+    }
+  }
+
+  // Esegue l'azione scelta ("csv" | "pdf" | "pdf-acquisto") sui dati completi.
+  function eseguiAzioneConDati(azione, data) {
+    if (azione === "pdf") generaPdfNoleggio(data);
+    else if (azione === "pdf-acquisto") generaPdfAcquisto(data);
+    else downloadAlaskaCsv(data);
+  }
+
   function eseguiAzioneNoleggio(azione) {
     setNoleggioError("");
     const dati = {
@@ -1372,8 +1516,7 @@ function Dashboard({
     };
     if (referente.trim() && cellulare.trim() && email.trim()) {
       const data = { ...dati, ask: { referente, cellulare, email, potenzaDisponibile, fornitore } };
-      if (azione === "pdf") generaPdfNoleggio(data);
-      else downloadAlaskaCsv(data);
+      eseguiAzioneConDati(azione, data);
       return;
     }
     setAlaskaAzione(azione);
@@ -1385,7 +1528,7 @@ function Dashboard({
   function confermaAlaska() {
     const { referente: r, cellulare: c, email: e } = alaskaForm;
     if (!r.trim() || !c.trim() || !e.trim()) {
-      setAlaskaError(`Compila tutti i campi prima di generare il ${alaskaAzione === "pdf" ? "PDF" : "CSV"}.`);
+      setAlaskaError(`Compila tutti i campi prima di generare il ${alaskaAzione === "csv" ? "CSV" : "PDF"}.`);
       return;
     }
     const data = {
@@ -1396,8 +1539,7 @@ function Dashboard({
     onAggiornaContatti?.(alaskaForm);
     setAlaskaError("");
     setShowAlaskaModal(false);
-    if (alaskaAzione === "pdf") generaPdfNoleggio(data);
-    else downloadAlaskaCsv(data);
+    eseguiAzioneConDati(alaskaAzione, data);
   }
 
   // Salvataggio su Supabase (tabella `progetti`). Il primo salvataggio di un
@@ -1548,6 +1690,10 @@ function Dashboard({
           {pdfNoleggioLoading && <span className="spinner" />}
           📄 PDF Noleggio
         </button>
+        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf-acquisto")} disabled={pdfAcquistoLoading}>
+          {pdfAcquistoLoading && <span className="spinner" />}
+          📄 PDF Acquisto
+        </button>
         <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
@@ -1557,9 +1703,9 @@ function Dashboard({
       {showAlaskaModal && (
         <div className="modal-overlay" onClick={() => setShowAlaskaModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>{alaskaAzione === "pdf" ? "PDF Noleggio" : "CSV Noleggio"}</h3>
+            <h3>{alaskaAzione === "pdf" ? "PDF Noleggio" : alaskaAzione === "pdf-acquisto" ? "PDF Acquisto" : "CSV Noleggio"}</h3>
             <p className="modal-desc">
-              Mancano ancora questi dati (li avevi lasciati vuoti nello step Consumi): servono per completare il {alaskaAzione === "pdf" ? "PDF" : "CSV"} nel formato richiesto dal noleggio operativo Alaska. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}. Quello che inserisci qui verrà ricordato: con "Salva progetto" non te lo richiederò più.
+              Mancano ancora questi dati (li avevi lasciati vuoti nello step Consumi): servono per completare il {alaskaAzione === "csv" ? "CSV" : "PDF"}{alaskaAzione === "pdf-acquisto" ? "" : " nel formato richiesto dal noleggio operativo Alaska"}. Tutti gli altri campi vengono presi automaticamente dal preventivo di {company.ragioneSociale}. Quello che inserisci qui verrà ricordato: con "Salva progetto" non te lo richiederò più.
             </p>
             <div className="field">
               <label>Nome referente</label>
@@ -1577,7 +1723,7 @@ function Dashboard({
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowAlaskaModal(false)}>Annulla</button>
               <button className="btn btn-primary" onClick={confermaAlaska}>
-                {alaskaAzione === "pdf" ? "Genera PDF" : "Genera CSV"}
+                {alaskaAzione === "csv" ? "Genera CSV" : "Genera PDF"}
               </button>
             </div>
           </div>

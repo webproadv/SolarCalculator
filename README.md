@@ -35,6 +35,7 @@ Configurale nel progetto Vercel (Settings → Environment Variables) o in un fil
 | `GOOGLE_SHEETS_PIPE_SHEET_NAME` | Facoltativa, default `PIPE` — nome del foglio (tab) dentro il file in cui va aggiunta la riga | — |
 | `PDFOTTER_API_KEY` | API key [PDF Otter](https://pdfotter.github.io/slate/) usata dal bottone **"📄 PDF Noleggio"** in dashboard per riempire automaticamente il template PDF del contratto di noleggio — vedi sezione dedicata sotto | Il bottone "PDF Noleggio" mostra un errore ("Integrazione PDF Otter non configurata") invece di generare il PDF; il resto dell'app non ne risente |
 | `PDFOTTER_TEMPLATE_ID` | ID del template PDF Otter da riempire (es. `tem_...`, dalla URL del template su pdfotter.com) | Come sopra |
+| `PDFOTTER_TEMPLATE_ID_ACQUISTO` | ID del template PDF Otter del **"📄 PDF Acquisto"** (proposta di acquisto diretto, stessa `PDFOTTER_API_KEY`). Facoltativa: se assente si usa il template `tem_BV8fHsaWJvx5B7` | Si usa il template predefinito |
 
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del progetto Supabase (archivio progetti + whitelist accessi) | L'app non si avvia in modo funzionante: salvataggio/recupero progetti e verifica accessi falliscono |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chiave service role Supabase (Settings → API), usata **solo lato server** nelle API route e nel middleware — non è mai esposta al browser | Come sopra |
@@ -144,3 +145,7 @@ npm run dev
 - In modalità "foto bolletta", la lettura automatica di consumo annuo e spesa annua dipende da quanto è effettivamente leggibile nella foto caricata (molte bollette non riportano un totale annuo esplicito): quando non rilevabili, questi due campi vanno inseriti a mano nella stessa schermata.
 - Il grafico combinato mensile consumi/produzione usa, in modalità "foto bolletta", un consumo distribuito in parti uguali sui 12 mesi (nessuna stagionalità): è un'approssimazione dichiarata in dashboard, non un profilo di carico reale. In modalità manuale il grafico riflette invece i valori mensili realmente inseriti.
 - La produzione annua specifica (kWh/kWp) è un dato inserito manualmente: la sua accuratezza dipende interamente dalla fonte usata dal commerciale (PVGIS, un altro tool, o una stima) al momento dell'inserimento.
+
+### PDF Acquisto
+
+Accanto a "📄 PDF Noleggio", il bottone **"📄 PDF Acquisto"** riempie il template PDF Otter della proposta di acquisto diretto (`/api/pdf-acquisto`, mappatura in `buildAcquistoFieldMap` in `app/page.jsx`; i nomi dei campi sono quelli del template: `Azienda, via, cap, citta, … risp25, vant`) e scarica **"Proposta acquisto &lt;nome azienda&gt;.pdf"**. Usa gli stessi dati del preventivo e gli stessi contatti (referente/cellulare/email) del PDF Noleggio; `pec`, `iban`, `sdi`, `codfis`, telefoni, `wall` e `vant` restano vuoti perché non hanno una fonte.
