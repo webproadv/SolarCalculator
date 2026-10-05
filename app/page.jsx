@@ -302,6 +302,8 @@ export default function Page() {
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState("");
+  const [coordError, setCoordError] = useState("");
+  const [coordLoading, setCoordLoading] = useState(false);
 
   // Inquadratura scelta a mano dall'utente nell'anteprima satellitare dello
   // step Azienda (SatellitePreviewMap): { lat, lng, zoom } dell'ultima vista
@@ -438,8 +440,8 @@ export default function Page() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ piva }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Errore nella ricerca azienda.");
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error || `Errore nella ricerca azienda (HTTP ${r.status}).`);
       setCompany(data);
       // Nuova azienda: riparte da un'inquadratura satellitare pulita invece
       // di tenere quella (eventuale) dell'azienda cercata in precedenza.
@@ -451,6 +453,58 @@ export default function Page() {
       setCompanyLoading(false);
     }
   }
+
+  // Bottone "Inserimento Manuale": apre il form dei dati azienda vuoto, da
+  // compilare a mano (utile quando nessuna fonte trova la Partita IVA).
+  function inserimentoManuale() {
+    setCompanyError("");
+    setCompany({
+      demo: false,
+      piva: piva.trim(),
+      ragioneSociale: "",
+      indirizzo: "",
+      cap: "",
+      comune: "",
+      provincia: "",
+      lat: "",
+      lng: "",
+      fonte: "manuale",
+    });
+    setSatView(null);
+    setSatMapKey((k) => k + 1);
+  }
+
+  // Coordinate dall'indirizzo inserito a mano (Google Geocoding, lato server).
+  async function trovaCoordinate() {
+    setCoordError("");
+    setCoordLoading(true);
+    try {
+      const r = await fetch("/api/geocode", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          indirizzo: company.indirizzo,
+          cap: company.cap,
+          comune: company.comune,
+          provincia: company.provincia,
+        }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error || `Errore nel calcolo delle coordinate (HTTP ${r.status}).`);
+      setCompany((prev) => ({ ...prev, lat: data.lat, lng: data.lng }));
+      setSatView(null);
+      setSatMapKey((k) => k + 1);
+    } catch (err) {
+      setCoordError(err.message);
+    } finally {
+      setCoordLoading(false);
+    }
+  }
+
+  // Coordinate utilizzabili (numeri finiti, non vuoti): richieste per proseguire.
+  const coordValide =
+    company && company.lat !== "" && company.lng !== "" && Number.isFinite(Number(company.lat)) && Number.isFinite(Number(company.lng));
+  const aziendaCompleta = !!company && !!String(company.ragioneSociale || "").trim() && coordValide;
 
   function updateCompanyField(key, value) {
     setCompany((prev) => ({ ...prev, [key]: value }));
@@ -647,8 +701,8 @@ export default function Page() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          lat: company.lat,
-          lng: company.lng,
+          lat: Number(company.lat),
+          lng: Number(company.lng),
           spesaAnnua: Number(spesaAnnua),
           consumoAnnuoKwh: consumoEffettivo,
           f1Pct: f1Effettivo,
@@ -751,11 +805,26 @@ export default function Page() {
                     maxLength={11}
                   />
                 </div>
-                {companyError && <div className="error-box">{companyError}</div>}
-                <button className="btn btn-primary" type="submit" disabled={companyLoading || piva.length !== 11}>
-                  {companyLoading && <span className="spinner" />}
-                  Cerca azienda
-                </button>
+                {companyError && (
+                  <div className="error-box">
+                    {companyError}
+                    <div style={{ marginTop: 6 }}>Puoi compilare i dati a mano con &quot;Inserimento Manuale&quot;.</div>
+                  </div>
+                )}
+                <div className="btn-row" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                  <button className="btn btn-primary" type="submit" disabled={companyLoading || piva.length !== 11}>
+                    {companyLoading && <span className="spinner" />}
+                    Cerca azienda
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={inserimentoManuale} disabled={companyLoading}>
+                    ✍️ Inserimento Manuale
+                  </button>
+                </div>
+                {companyLoading && (
+                  <p className="hint" style={{ marginTop: 8 }}>
+                    Ricerca in corso: se la prima fonte non trova l&apos;azienda ne proviamo una seconda, può richiedere fino a un paio di minuti.
+                  </p>
+                )}
               </form>
 
               {company && (
@@ -763,6 +832,11 @@ export default function Page() {
                   {company.demo && (
                     <div className="info-box">
                       Dati di esempio: nessuna fonte configurata su questa istanza (APIFY_API_TOKEN o OPENAPI_KEY). In produzione qui comparirebbero i dati reali dell&apos;azienda.
+                    </div>
+                  )}
+                  {company.fonte === "manuale" && (
+                    <div className="info-box">
+                      Inserimento manuale: compila ragione sociale e indirizzo, poi usa &quot;Trova coordinate&quot; (o inserisci latitudine e longitudine a mano) per poter proseguire.
                     </div>
                   )}
                   <div className="field">
@@ -790,13 +864,22 @@ export default function Page() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div className="field">
                       <label>Latitudine</label>
-                      <input type="number" step="0.000001" value={company.lat} onChange={(e) => updateCompanyField("lat", Number(e.target.value))} />
+                      <input type="number" step="0.000001" value={company.lat ?? ""} onChange={(e) => updateCompanyField("lat", e.target.value === "" ? "" : Number(e.target.value))} />
                     </div>
                     <div className="field">
                       <label>Longitudine</label>
-                      <input type="number" step="0.000001" value={company.lng} onChange={(e) => updateCompanyField("lng", Number(e.target.value))} />
+                      <input type="number" step="0.000001" value={company.lng ?? ""} onChange={(e) => updateCompanyField("lng", e.target.value === "" ? "" : Number(e.target.value))} />
                     </div>
                   </div>
+                  {(company.fonte === "manuale" || !coordValide) && (
+                    <div style={{ marginBottom: 8 }}>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={trovaCoordinate} disabled={coordLoading}>
+                        {coordLoading && <span className="spinner" />}
+                        📍 Trova coordinate dall&apos;indirizzo
+                      </button>
+                      {coordError && <div className="error-box" style={{ marginTop: 8 }}>{coordError}</div>}
+                    </div>
+                  )}
                   <p className="hint">La sede legale non sempre coincide con il capannone su cui installare i pannelli: correggi indirizzo e coordinate se necessario.</p>
 
                   <div className="field" style={{ marginTop: 8 }}>
@@ -809,12 +892,16 @@ export default function Page() {
                     <p className="hint" style={{ marginTop: 2, marginBottom: 8 }}>
                       Trascina per spostare l&apos;inquadratura e usa +/− per lo zoom: verrà usata questa stessa vista per generare la foto satellitare nella schermata dei calcoli e nel PDF.
                     </p>
-                    <SatellitePreviewMap key={satMapKey} lat={company.lat} lng={company.lng} onViewChange={setSatView} />
+                    {coordValide ? (
+                      <SatellitePreviewMap key={satMapKey} lat={Number(company.lat)} lng={Number(company.lng)} onViewChange={setSatView} />
+                    ) : (
+                      <p className="hint">Inserisci le coordinate (o usa &quot;Trova coordinate&quot;) per vedere l&apos;anteprima satellitare.</p>
+                    )}
                   </div>
 
                   <div className="btn-row">
                     <span />
-                    <button className="btn btn-primary" onClick={() => setStep(1)}>
+                    <button className="btn btn-primary" onClick={() => setStep(1)} disabled={!aziendaCompleta} title={aziendaCompleta ? undefined : "Servono ragione sociale e coordinate valide"}>
                       Continua →
                     </button>
                   </div>
