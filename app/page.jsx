@@ -268,7 +268,7 @@ function buildAcquistoFieldMap({
     "5",                                             // capbat
     fmtNumIt(numeroBatterie, 0),                     // numbat ("POTENZA BATTERIE/5")
     "INCLUSO",                                       // batinc
-    batteriaKwh > 0 ? `-${fmtNumIt(batteriaKwh, 0)}` : "", // accum ("-" + "ACCUMULO DA INSTALLARE KW"; vuoto se senza accumulo)
+    batteriaKwh > 0 ? `${fmtNumIt(batteriaKwh, 0)} Kw` : "", // accum ("ACCUMULO DA INSTALLARE KW" + " Kw"; vuoto se senza accumulo)
     "",                                              // wall
     "",                                              // walinc
     fmtNumIt(costoImpianto, 2),                      // totale ("IMPORTO IMPIANTO")
