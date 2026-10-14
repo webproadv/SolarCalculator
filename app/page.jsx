@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import SatellitePreviewMap from "./SatellitePreviewMap";
+import OrientamentoDial from "./OrientamentoDial";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -1135,8 +1136,14 @@ export default function Page() {
                           value={orientamentoPannelli}
                           onChange={(e) => setOrientamentoPannelli(e.target.value)}
                         />
-                        <p className="hint">0 = Sud, +90 = Ovest, −90 = Est, ±180 = Nord.</p>
+                        <p className="hint">0 = Sud, +90 = Ovest, −90 = Est, ±180 = Nord. Oppure clicca sulla bussola qui sotto.</p>
                       </div>
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <p className="hint" style={{ textAlign: "center", marginBottom: 4 }}>
+                        Bussola (nord in alto, come sulla mappa): clicca o trascina nella direzione verso cui è rivolta la falda.
+                      </p>
+                      <OrientamentoDial value={orientamentoPannelli} onChange={setOrientamentoPannelli} />
                     </div>
                     {(!inclinazioneValida || !orientamentoValido) && (
                       <div className="error-box">Inclinazione tra 0° e 90°, orientamento tra −180° e +180°.</div>
