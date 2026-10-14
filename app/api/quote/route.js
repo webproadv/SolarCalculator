@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchRoof, fetchPvgisProduzione } from "../../../lib/sources";
+import { fetchRoof, fetchPvgisProduzione, normalizzaGeometria } from "../../../lib/sources";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -10,8 +10,9 @@ import {
 
 // Orchestratore principale: dato un sito (lat/lng), i consumi dichiarati (con
 // ripartizione F1/F2/F3) e la produzione specifica del sito — calcolata con
-// PVGIS v6 (vedi fetchPvgisProduzione in lib/sources.js: Sud, 25°,
-// monocristallino 2025 su tetto, perdite 12%) — calcola:
+// PVGIS v6 (vedi fetchPvgisProduzione in lib/sources.js: inclinazione e
+// orientamento indicati dal commerciale, monocristallino 2025 su tetto Free
+// standing, perdite 12%) — calcola:
 // - il fabbisogno diurno/notturno, in base ai giorni lavorativi dichiarati;
 // - la taglia di impianto e accumulo suggerita (di partenza: resta poi
 //   modificabile a mano in dashboard, insieme al costo dell'impianto);
@@ -23,6 +24,7 @@ import {
 //   lat, lng,
 //   spesaAnnua, consumoAnnuoKwh,
 //   f1Pct, f2Pct, f3Pct,          // ripartizione consumi, sommano a 100
+//   inclinazioneGradi, orientamentoGradi,  // pannelli: 0-90° e -180/+180° (0 = Sud, +90 = Ovest, -90 = Est)
 //   pvgisLat?, pvgisLng?,         // posizione del tetto confermata in anteprima satellitare
 //                                 // (se assente si usano lat/lng dell'azienda)
 //   giorniLavorativi,             // 5, 6 o 7 — usato per il calcolo diurno/notturno
@@ -46,6 +48,14 @@ export async function POST(req) {
     );
   }
 
+  const geometria = normalizzaGeometria(body.inclinazioneGradi, body.orientamentoGradi);
+  if (!geometria) {
+    return NextResponse.json(
+      { error: "Inclinazione (0-90°) e orientamento (da -180° a +180°, 0 = Sud) dei pannelli mancanti o non validi." },
+      { status: 400 }
+    );
+  }
+
   try {
     const sitoPvgis =
       typeof body.pvgisLat === "number" && typeof body.pvgisLng === "number"
@@ -53,7 +63,7 @@ export async function POST(req) {
         : { lat, lng };
     const [roof, pvgis] = await Promise.all([
       fetchRoof(lat, lng),
-      fetchPvgisProduzione(sitoPvgis.lat, sitoPvgis.lng),
+      fetchPvgisProduzione(sitoPvgis.lat, sitoPvgis.lng, geometria),
     ]);
     const produzioneAnnuaFvKwh = pvgis.produzioneAnnuaKwhPerKwp;
     const areaTotale = roof.segments.reduce((s, seg) => s + seg.areaMeters2, 0);

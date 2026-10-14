@@ -407,6 +407,18 @@ export default function Page() {
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState("");
+  // Geometria dei pannelli, richiesta dopo aver centrato la mappa sul tetto e
+  // usata per il calcolo della produzione con PVGIS: inclinazione 0-90° e
+  // orientamento -180/+180° (0 = Sud, +90 = Ovest, -90 = Est).
+  const [inclinazionePannelli, setInclinazionePannelli] = useState("25");
+  const [orientamentoPannelli, setOrientamentoPannelli] = useState("0");
+  // Anteprima della produzione specifica (kWh/kWp annui) calcolata da PVGIS per
+  // la geometria indicata: l'utente può cambiare inclinazione/orientamento e
+  // ricalcolare l'anteprima finché non è soddisfatto, poi conferma. Solo dopo la
+  // conferma si prosegue con consumi e calcoli economici.
+  const [pvgisAnteprima, setPvgisAnteprima] = useState(null); // { chiave, annuo, mensile, ipotesi }
+  const [pvgisAnteprimaLoading, setPvgisAnteprimaLoading] = useState(false);
+  const [pvgisAnteprimaError, setPvgisAnteprimaError] = useState("");
   const [coordError, setCoordError] = useState("");
   const [coordLoading, setCoordLoading] = useState(false);
 
@@ -495,6 +507,11 @@ export default function Page() {
       if (!r.ok) throw new Error(data.error || "Errore nel caricamento del progetto salvato.");
       const saved = data.dati || {};
       if (saved.company) setCompany(saved.company);
+      // Ripristina inclinazione/orientamento usati nel progetto (se presenti).
+      const ipSalvate = saved.quote?.input;
+      if (Number.isFinite(ipSalvate?.inclinazioneGradi)) setInclinazionePannelli(String(ipSalvate.inclinazioneGradi));
+      if (Number.isFinite(ipSalvate?.orientamentoGradi)) setOrientamentoPannelli(String(ipSalvate.orientamentoGradi));
+      setPvgisAnteprima(null);
       setSatView(null);
       setSatMapKey((k) => k + 1);
       if (saved.quote) {
@@ -509,7 +526,12 @@ export default function Page() {
             const rp = await fetch("/api/pvgis", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ lat: quoteSalvato.input.lat, lng: quoteSalvato.input.lng }),
+              body: JSON.stringify({
+                lat: quoteSalvato.input.lat,
+                lng: quoteSalvato.input.lng,
+                inclinazioneGradi: quoteSalvato.input.inclinazioneGradi,
+                orientamentoGradi: quoteSalvato.input.orientamentoGradi,
+              }),
             });
             const pv = await rp.json();
             if (rp.ok) {
@@ -639,7 +661,52 @@ export default function Page() {
   // Coordinate utilizzabili (numeri finiti, non vuoti): richieste per proseguire.
   const coordValide =
     company && company.lat !== "" && company.lng !== "" && Number.isFinite(Number(company.lat)) && Number.isFinite(Number(company.lng));
-  const aziendaCompleta = !!company && !!String(company.ragioneSociale || "").trim() && coordValide;
+  const inclinazioneValida =
+    inclinazionePannelli !== "" && Number.isFinite(Number(inclinazionePannelli)) && Number(inclinazionePannelli) >= 0 && Number(inclinazionePannelli) <= 90;
+  const orientamentoValido =
+    orientamentoPannelli !== "" && Number.isFinite(Number(orientamentoPannelli)) && Number(orientamentoPannelli) >= -180 && Number(orientamentoPannelli) <= 180;
+  // Punto su cui PVGIS calcola (vista satellitare confermata, altrimenti coordinate
+  // dell'azienda). Arrotondato a 3 decimali (~100 m): la griglia PVGIS è più larga.
+  const pvgisSito = satView ? { lat: satView.lat, lng: satView.lng } : coordValide ? { lat: Number(company.lat), lng: Number(company.lng) } : null;
+  const pvgisChiaveCorrente =
+    pvgisSito && inclinazioneValida && orientamentoValido
+      ? `${pvgisSito.lat.toFixed(3)}|${pvgisSito.lng.toFixed(3)}|${Number(inclinazionePannelli)}|${Number(orientamentoPannelli)}`
+      : null;
+  // L'anteprima è "confermabile" solo se calcolata proprio con i valori attuali.
+  const anteprimaAggiornata = !!pvgisAnteprima && pvgisAnteprima.chiave === pvgisChiaveCorrente;
+  const aziendaCompleta =
+    inclinazioneValida && orientamentoValido && !!company && !!String(company.ragioneSociale || "").trim() && coordValide && anteprimaAggiornata;
+
+  async function calcolaAnteprimaPvgis() {
+    if (!pvgisSito || !pvgisChiaveCorrente) return;
+    setPvgisAnteprimaLoading(true);
+    setPvgisAnteprimaError("");
+    try {
+      const r = await fetch("/api/pvgis", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          lat: pvgisSito.lat,
+          lng: pvgisSito.lng,
+          inclinazioneGradi: Number(inclinazionePannelli),
+          orientamentoGradi: Number(orientamentoPannelli),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Errore nel calcolo con PVGIS.");
+      setPvgisAnteprima({
+        chiave: pvgisChiaveCorrente,
+        annuo: data.produzioneAnnuaKwhPerKwp,
+        mensile: data.produzioneMensileKwhPerKwp,
+        ipotesi: data.ipotesi,
+      });
+    } catch (err) {
+      setPvgisAnteprimaError(err.message);
+      setPvgisAnteprima(null);
+    } finally {
+      setPvgisAnteprimaLoading(false);
+    }
+  }
 
   function updateCompanyField(key, value) {
     setCompany((prev) => ({ ...prev, [key]: value }));
@@ -845,6 +912,8 @@ export default function Page() {
           f3Pct: f3Effettivo,
           // Posizione del tetto confermata nell'anteprima satellitare: è il
           // punto su cui PVGIS calcola la produzione (altrimenti l'indirizzo).
+          inclinazioneGradi: Number(inclinazionePannelli),
+          orientamentoGradi: Number(orientamentoPannelli),
           pvgisLat: satView ? satView.lat : undefined,
           pvgisLng: satView ? satView.lng : undefined,
           giorniLavorativi: giorniEffettivi,
@@ -1036,10 +1105,106 @@ export default function Page() {
                     )}
                   </div>
 
+                  <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+                    <h4 style={{ margin: "0 0 4px" }}>Pannelli: inclinazione e orientamento</h4>
+                    <p className="hint" style={{ marginTop: 0 }}>
+                      Quando la mappa inquadra il tetto giusto, indica come saranno posizionati i pannelli: la produzione dell&apos;impianto viene calcolata con PVGIS su questa posizione e con questi valori.
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div className="field">
+                        <label>Inclinazione pannelli (°)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="90"
+                          step="1"
+                          placeholder="es. 25"
+                          value={inclinazionePannelli}
+                          onChange={(e) => setInclinazionePannelli(e.target.value)}
+                        />
+                        <p className="hint">Da 0° (orizzontale) a 90° (verticale). Tipico: 25°.</p>
+                      </div>
+                      <div className="field">
+                        <label>Orientamento (gradi)</label>
+                        <input
+                          type="number"
+                          min="-180"
+                          max="180"
+                          step="1"
+                          placeholder="0 = Sud"
+                          value={orientamentoPannelli}
+                          onChange={(e) => setOrientamentoPannelli(e.target.value)}
+                        />
+                        <p className="hint">0 = Sud, +90 = Ovest, −90 = Est, ±180 = Nord.</p>
+                      </div>
+                    </div>
+                    {(!inclinazioneValida || !orientamentoValido) && (
+                      <div className="error-box">Inclinazione tra 0° e 90°, orientamento tra −180° e +180°.</div>
+                    )}
+
+                    <div className="btn-row" style={{ justifyContent: "flex-start", gap: 12, marginTop: 4 }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={calcolaAnteprimaPvgis}
+                        disabled={!pvgisChiaveCorrente || pvgisAnteprimaLoading}
+                      >
+                        {pvgisAnteprimaLoading ? "Calcolo PVGIS in corso…" : "☀️ Calcola anteprima produzione"}
+                      </button>
+                    </div>
+
+                    {pvgisAnteprimaError && <div className="error-box">{pvgisAnteprimaError}</div>}
+
+                    {pvgisAnteprima && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: "12px 14px",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          opacity: anteprimaAggiornata ? 1 : 0.55,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, color: "var(--muted, #667)" }}>
+                          Produzione media annua per kWp installato (PVGIS, {pvgisAnteprima.ipotesi?.periodo || "2014-2024"})
+                        </div>
+                        <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>
+                          {Math.round(pvgisAnteprima.annuo).toLocaleString("it-IT")} <span style={{ fontSize: 15, fontWeight: 500 }}>kWh/kWp·anno</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--muted, #667)", marginTop: 2 }}>
+                          Inclinazione {pvgisAnteprima.ipotesi?.inclinazioneGradi}° · {pvgisAnteprima.ipotesi?.orientamento} · Free standing · perdite {pvgisAnteprima.ipotesi?.perditePct}%
+                        </div>
+                        {Array.isArray(pvgisAnteprima.mensile) && pvgisAnteprima.mensile.length === 12 && (
+                          <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 56, marginTop: 10 }}>
+                            {pvgisAnteprima.mensile.map((v, i) => {
+                              const max = Math.max(...pvgisAnteprima.mensile);
+                              return (
+                                <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 9 }} title={`${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][i]}: ${Math.round(v)} kWh/kWp`}>
+                                  <div style={{ height: Math.max(2, (v / max) * 40), background: "var(--accent, #f59e0b)", borderRadius: 2 }} />
+                                  {["G","F","M","A","M","G","L","A","S","O","N","D"][i]}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {!anteprimaAggiornata && (
+                          <div className="hint" style={{ marginTop: 8 }}>
+                            Hai cambiato inclinazione, orientamento o posizione: ricalcola l&apos;anteprima per confermare.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!pvgisAnteprima && !pvgisAnteprimaLoading && (
+                      <p className="hint" style={{ marginTop: 8 }}>
+                        Calcola l&apos;anteprima per vedere la produzione media annua per kWp: puoi cambiare i gradi e ricalcolare finché il dato non ti soddisfa. Solo dopo la conferma si procede con i calcoli.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="btn-row">
                     <span />
-                    <button className="btn btn-primary" onClick={() => setStep(1)} disabled={!aziendaCompleta} title={aziendaCompleta ? undefined : "Servono ragione sociale e coordinate valide"}>
-                      Continua →
+                    <button className="btn btn-primary" onClick={() => setStep(1)} disabled={!aziendaCompleta} title={aziendaCompleta ? undefined : "Servono ragione sociale, coordinate valide e un'anteprima PVGIS aggiornata"}>
+                      Conferma produzione e continua →
                     </button>
                   </div>
                 </div>
@@ -1818,7 +1983,7 @@ function Dashboard({
               <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l={pvgisMensile ? "Produzione specifica annua (PVGIS)" : "Produzione specifica annua (inserita)"} />
               {pvgisMensile && (
                 <p className="hint" style={{ margin: 0 }}>
-                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()}, perdite {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
+                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()} (Free standing), perdite {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
                 </p>
               )}
               <StatMini v={`${kwp} kWp`} l="Impianto proposto" />
@@ -2135,7 +2300,7 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
@@ -2477,7 +2642,7 @@ function PrintReport({
         <h3 className="pr-h3">Nota metodologica</h3>
         <p className="pr-note" style={{ fontSize: 10.5 }}>
           La produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto
-          confermata: esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto, perdite di
+          confermata: esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing), perdite di
           sistema del 12%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
           una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
