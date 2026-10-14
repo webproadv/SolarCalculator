@@ -7,7 +7,7 @@ Deriva dalla bozza di progetto discussa in chat — vedi lì per architettura co
 ## Flusso applicativo (3 step)
 
 1. **Azienda** — Partita IVA → ragione sociale/indirizzo/coordinate precompilati automaticamente, ma tutti i campi (ragione sociale, indirizzo, CAP, comune, provincia, lat/lng) sono modificabili a mano. Include anche un'**anteprima satellitare interattiva** (mappa Mapbox trascinabile e zoomabile): l'inquadratura scelta qui è quella che verrà usata per generare la foto satellitare della dashboard e del PDF — vedi "Foto satellitare del sito" più sotto.
-2. **Consumi e spesa** — un'unica schermata: foto della bolletta (lettura automatica di ripartizione F1/F2/F3, consumo annuo e spesa annua, dove leggibili) oppure inserimento manuale dei consumi mese per mese (il totale annuo e la ripartizione F1/F2/F3 si calcolano automaticamente dalla tabella). Nella stessa schermata si inseriscono anche: la spesa energetica annua, la **produzione annuale FV (kWh/kWp)** del sito — inserita manualmente, non calcolata da PVGIS —, i **giorni lavorativi** settimanali dell'azienda (5/6/7) usati per stimare il fabbisogno diurno/notturno, la potenza disponibile in immissione e il fornitore attuale, e i contatti del cliente (**referente, cellulare, email** — facoltativi: se lasciati vuoti qui vengono richiesti al momento di generare il CSV Noleggio, mai per l'invio a Pipe). Non c'è uno step successivo che richiede di nuovo questi dati.
+2. **Consumi e spesa** — un'unica schermata: foto della bolletta (lettura automatica di ripartizione F1/F2/F3, consumo annuo e spesa annua, dove leggibili) oppure inserimento manuale dei consumi mese per mese (il totale annuo e la ripartizione F1/F2/F3 si calcolano automaticamente dalla tabella). Nella stessa schermata si inseriscono anche: la spesa energetica annua, i **giorni lavorativi** settimanali dell'azienda (5/6/7) usati per stimare il fabbisogno diurno/notturno, la potenza disponibile in immissione e il fornitore attuale, e i contatti del cliente (**referente, cellulare, email** — facoltativi: se lasciati vuoti qui vengono richiesti al momento di generare il CSV Noleggio, mai per l'invio a Pipe). Non c'è uno step successivo che richiede di nuovo questi dati.
 3. **Risultati** — dashboard con foto satellitare (generata automaticamente), producibilità dell'impianto, profilo di consumo (F1/F2/F3 e diurno/notturno), dimensionamento impianto/accumulo (editabile), vantaggi economici e dati di partenza.
 
 ## Stato attuale
@@ -102,21 +102,21 @@ Se la generazione fallisce comunque (errore di rete, token mancante o non valido
 
 ## Calcolo di produzione, dimensionamento e fabbisogno diurno/notturno
 
-`/api/quote` **non chiama più PVGIS**: la producibilità specifica annua del sito (kWh/kWp/anno) si inserisce manualmente nello step "Consumi" (tipicamente presa da PVGIS o da una stima già in possesso del commerciale). Tutto il resto si deriva da lì, in `lib/calc.js`:
+`/api/quote` calcola la produzione specifica del sito (kWh/kWp/anno, annua e mensile) con **PVGIS v6** (`/power/broadband`, nessuna API key: `fetchPvgisProduzione` in `lib/sources.js`) — non c'è più il campo "Produzione annuale FV" nello step Consumi. Ipotesi fisse: esposizione a **Sud** (in v6 `surface_orientation` = 180), inclinazione **25°**, pannelli **monocristallini 2025 su tetto** (`cSi:Integrated 2025`; per "Free standing" cambiare `PVGIS_MODULO`, +3% circa di resa), perdite di sistema **11%** (`system_efficiency` 0,89), media degli anni 2014-2024. Il calcolo è a 1 kWp e si riscala linearmente sui kWp proposti, quindi modificare l'impianto in dashboard non richiama PVGIS. Il punto usato è la posizione del tetto confermata nell'anteprima satellitare (altrimenti l'indirizzo). I progetti salvati prima di PVGIS si ricalcolano con PVGIS alla riapertura (taglia, accumulo e costo salvati restano; cambiano produzione e valori derivati). Tutto il resto si deriva da lì, in `lib/calc.js`:
 
 - **Fabbisogno diurno/notturno** — dai consumi per fascia F1/F2/F3 (in kWh, non solo percentuali) e dai giorni lavorativi dichiarati (`diurnoNotturno`):
   - 5 giorni/settimana: `Diurno = F1`
   - 6 giorni/settimana: `Diurno = F1 + F2 × 0,33`
   - 7 giorni/settimana: `Diurno = F1 + F2 × 0,33 + F3 × 0,5`
   - `Notturno = Totale − Diurno`
-- **Impianto proposto (suggerito)** — `sizeSystemFromProduzione`: `Consumo totale annuo ÷ Produzione annuale FV (kWh/kWp)`.
+- **Impianto proposto (suggerito)** — `sizeSystemFromProduzione`: `Consumo totale annuo ÷ Produzione specifica annua PVGIS (kWh/kWp)`.
 - **Accumulo proposto (suggerito)** — `sizeBatteryFromNotturno`: `Consumo notturno annuo ÷ 365`.
 - **Impianto proposto, Accumulo proposto e Costo impianto proposto** sono tre campi editabili in dashboard (sezione B), precompilati con i valori suggeriti sopra ma sempre modificabili: da questi tre valori si ricalcolano in tempo reale produzione, autoconsumo, benefici economici e payback.
-- **Produzione mensile dell'impianto** — `monthlyProductionFromShares`: `Produzione annua totale (= produzione FV inserita × impianto proposto)` ripartita secondo un profilo mensile fisso (`MONTHLY_PRODUCTION_SHARES` in `lib/calc.js`): 5% · 5,7% · 8% · 9,8% · 10,5% · 12% · 13% · 11% · 8,7% · 7% · 5,1% · 4,2% (gen→dic, somma 100%).
+- **Produzione mensile dell'impianto** — `monthlyProductionFromPvgis`: produzione specifica mensile PVGIS (kWh/kWp, gen→dic) × impianto proposto; la produzione annua totale è la somma dei 12 mesi. (`monthlyProductionFromShares` e `MONTHLY_PRODUCTION_SHARES` restano solo come fallback per i progetti salvati se PVGIS non risponde alla riapertura.)
 - **Grafico combinato mensile** (fondo sezione "Vantaggi") — consumi mensili impilati (diurno/notturno) affiancati alla produzione mensile stimata, sulla stessa scala kWh. In modalità "foto bolletta" (nessun dettaglio mensile disponibile) il consumo annuo è distribuito in parti uguali sui 12 mesi; in modalità manuale usa i valori reali della tabella mensile.
 - **Grafico e tabella dei soli consumi mensili** (card "Riepilogo consumi", sezione B) — stessi valori diurno/notturno mese per mese del grafico combinato sopra, ma senza la produzione: un grafico a barre impilate affiancato alla tabella con gli stessi 12 valori, per leggere a colpo d'occhio l'andamento dei consumi del cliente accanto ai numeri esatti. Nella pagina corrispondente del PDF stampabile compare solo il grafico, a piena larghezza (senza la tabella).
 
-La geometria del tetto (Google Solar API `buildingInsights`) resta usata solo come riferimento (area massima disponibile, foto satellitare), non per calcolare la produzione. L'endpoint standalone `/api/pvgis` e le funzioni PVGIS in `lib/sources.js` restano nel codice come utility indipendente, ma non sono più richiamate dal flusso principale.
+La geometria del tetto (Google Solar API `buildingInsights`) resta usata solo come riferimento (area massima disponibile, foto satellitare), non per calcolare la produzione. L'endpoint `/api/pvgis` (body `{lat, lng}`) espone la stessa funzione PVGIS usata da `/api/quote`; la usa anche la riapertura dei progetti salvati prima dell'introduzione di PVGIS.
 
 ## Sviluppo locale
 
@@ -144,7 +144,7 @@ npm run dev
 - La scheda con la geometria di dettaglio dei segmenti di tetto (aree, pitch, azimuth) non è più mostrata in dashboard: resta usata solo internamente per dimensionare l'inquadratura della foto satellitare.
 - In modalità "foto bolletta", la lettura automatica di consumo annuo e spesa annua dipende da quanto è effettivamente leggibile nella foto caricata (molte bollette non riportano un totale annuo esplicito): quando non rilevabili, questi due campi vanno inseriti a mano nella stessa schermata.
 - Il grafico combinato mensile consumi/produzione usa, in modalità "foto bolletta", un consumo distribuito in parti uguali sui 12 mesi (nessuna stagionalità): è un'approssimazione dichiarata in dashboard, non un profilo di carico reale. In modalità manuale il grafico riflette invece i valori mensili realmente inseriti.
-- La produzione annua specifica (kWh/kWp) è un dato inserito manualmente: la sua accuratezza dipende interamente dalla fonte usata dal commerciale (PVGIS, un altro tool, o una stima) al momento dell'inserimento.
+- La produzione è una stima PVGIS con ipotesi fisse (Sud, 25°, perdite 11%) sulla posizione del tetto confermata: non considera ombreggiamenti locali, orientamento reale della falda o degrado dei moduli oltre il primo anno.
 
 ### PDF Acquisto
 

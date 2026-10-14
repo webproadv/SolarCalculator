@@ -12,6 +12,7 @@ import {
   paybackYears,
   co2Evitata,
   monthlyProductionFromShares,
+  monthlyProductionFromPvgis,
   noleggioOperativo,
   flussoCassaNoleggio,
 } from "../lib/calc";
@@ -466,7 +467,6 @@ export default function Page() {
   const [referente, setReferente] = useState("");
   const [cellulare, setCellulare] = useState("");
   const [email, setEmail] = useState("");
-  const [produzioneAnnuaFvKwh, setProduzioneAnnuaFvKwh] = useState("");
   const [giorniLavorativi, setGiorniLavorativi] = useState(5);
 
   // Step 3 — risultati
@@ -497,7 +497,38 @@ export default function Page() {
       if (saved.company) setCompany(saved.company);
       setSatView(null);
       setSatMapKey((k) => k + 1);
-      if (saved.quote) setQuote(saved.quote);
+      if (saved.quote) {
+        let quoteSalvato = saved.quote;
+        // Progetti salvati prima dell'introduzione di PVGIS: produzione
+        // specifica inserita a mano e profilo mensile fisso. Alla riapertura
+        // si ricalcolano con PVGIS (taglia impianto, accumulo e costo salvati
+        // restano quelli del progetto; cambiano produzione e valori derivati).
+        // Se PVGIS non risponde, il progetto si apre comunque con i vecchi valori.
+        if (!Array.isArray(quoteSalvato.input?.produzioneMensileKwhPerKwp)) {
+          try {
+            const rp = await fetch("/api/pvgis", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ lat: quoteSalvato.input.lat, lng: quoteSalvato.input.lng }),
+            });
+            const pv = await rp.json();
+            if (rp.ok) {
+              quoteSalvato = {
+                ...quoteSalvato,
+                input: {
+                  ...quoteSalvato.input,
+                  produzioneAnnuaFvKwh: pv.produzioneAnnuaKwhPerKwp,
+                  produzioneMensileKwhPerKwp: pv.produzioneMensileKwhPerKwp,
+                  pvgisIpotesi: pv.ipotesi,
+                },
+              };
+            }
+          } catch {
+            /* si mantengono i valori salvati */
+          }
+        }
+        setQuote(quoteSalvato);
+      }
       if (saved.monthly) setMonthly(saved.monthly);
       if (saved.bollettaMode) setBollettaMode(saved.bollettaMode);
       if (saved.ocrMonthlyKwh) setOcrMonthlyKwh(saved.ocrMonthlyKwh);
@@ -812,7 +843,10 @@ export default function Page() {
           f1Pct: f1Effettivo,
           f2Pct: f2Effettivo,
           f3Pct: f3Effettivo,
-          produzioneAnnuaFvKwh: Number(produzioneAnnuaFvKwh),
+          // Posizione del tetto confermata nell'anteprima satellitare: è il
+          // punto su cui PVGIS calcola la produzione (altrimenti l'indirizzo).
+          pvgisLat: satView ? satView.lat : undefined,
+          pvgisLng: satView ? satView.lng : undefined,
           giorniLavorativi: giorniEffettivi,
         }),
       });
@@ -846,7 +880,6 @@ export default function Page() {
 
   const consumoValido = monthlyTotalsCalc.total > 0;
   const spesaValida = Number(spesaAnnua) > 0;
-  const produzioneValida = Number(produzioneAnnuaFvKwh) > 0;
   // In modalità foto occorre anche aver verificato/confermato la tabella
   // prima di poter proseguire con produzione FV/giorni lavorativi e generare
   // il preventivo (validazione dei dati richiesta dal cliente); in modalità
@@ -1267,18 +1300,7 @@ export default function Page() {
 
               {puoProseguireOltreBolletta ? (
                 <>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
-                    <div className="field">
-                      <label>Produzione annuale FV (kWh/kWp)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="es. 1350"
-                        value={produzioneAnnuaFvKwh}
-                        onChange={(e) => setProduzioneAnnuaFvKwh(e.target.value)}
-                      />
-                      <p className="hint">Producibilità specifica annua del sito (es. da PVGIS o da una tua stima): kWh prodotti per ogni kWp installato.</p>
-                    </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
                     <div className="field">
                       <label>Giorni lavorativi</label>
                       <select value={giorniLavorativi} onChange={(e) => setGiorniLavorativi(Number(e.target.value))}>
@@ -1295,7 +1317,7 @@ export default function Page() {
                     <button className="btn btn-ghost" onClick={() => setStep(0)}>← Indietro</button>
                     <button
                       className="btn btn-primary"
-                      disabled={quoteLoading || !consumoValido || !spesaValida || !produzioneValida}
+                      disabled={quoteLoading || !consumoValido || !spesaValida}
                       onClick={generaPreventivo}
                     >
                       {quoteLoading && <span className="spinner" />}
@@ -1604,8 +1626,16 @@ function Dashboard({
   const costoImpianto = Number(costoImpiantoProposto) || 0;
   const hasBattery = batteriaKwh > 0;
 
-  const produzioneAnnuaTotaleKwh = kwp * (quote.input.produzioneAnnuaFvKwh || 0);
-  const monthlyProduction = monthlyProductionFromShares(produzioneAnnuaTotaleKwh);
+  // Produzione da PVGIS (mese per mese, scalata sui kWp proposti). I progetti
+  // salvati prima dell'introduzione di PVGIS non hanno il dettaglio mensile:
+  // per loro resta il vecchio profilo percentuale fisso.
+  const pvgisMensile = Array.isArray(quote.input.produzioneMensileKwhPerKwp) && quote.input.produzioneMensileKwhPerKwp.length === 12
+    ? quote.input.produzioneMensileKwhPerKwp
+    : null;
+  const monthlyProduction = pvgisMensile
+    ? monthlyProductionFromPvgis(kwp, pvgisMensile)
+    : monthlyProductionFromShares(kwp * (quote.input.produzioneAnnuaFvKwh || 0));
+  const produzioneAnnuaTotaleKwh = monthlyProduction.reduce((s, v) => s + v, 0);
 
   const monthlyConsumo = monthlyConsumoFromQuote({ quoteInput: quote.input, monthly, ocrMonthlyKwh });
   const monthlyDiurno = monthlyConsumo.map((m) => m.diurno);
@@ -1778,14 +1808,19 @@ function Dashboard({
         <div className="grid-2">
           <div className="card">
             <h3>Produzione mensile stimata impianto</h3>
-            <div className="card-note">{kwp} kWp proposti — ripartizione mensile da profilo tipico</div>
+            <div className="card-note">{kwp} kWp proposti — {pvgisMensile ? "calcolo mensile PVGIS sul sito" : "ripartizione mensile da profilo tipico (valori salvati: PVGIS non era raggiungibile alla riapertura)"}</div>
             <BarChart data={monthlyProduction} />
           </div>
           <div className="card">
             <h3>Come viene calcolata</h3>
-            <div className="card-note">Produzione annua = produzione specifica del sito × impianto proposto</div>
+            <div className="card-note">Produzione annua = produzione specifica del sito (PVGIS) × impianto proposto</div>
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 14 }}>
-              <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l="Produzione specifica annua (inserita)" />
+              <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l={pvgisMensile ? "Produzione specifica annua (PVGIS)" : "Produzione specifica annua (inserita)"} />
+              {pvgisMensile && (
+                <p className="hint" style={{ margin: 0 }}>
+                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()}, perdite {quote.input.pvgisIpotesi?.perditePct ?? 11}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
+                </p>
+              )}
               <StatMini v={`${kwp} kWp`} l="Impianto proposto" />
               <StatMini v={`${Math.round(produzioneAnnuaTotaleKwh).toLocaleString("it-IT")} kWh`} l="Produzione annua totale stimata" />
             </div>
@@ -1976,10 +2011,10 @@ function Dashboard({
           <h3>Consumi (diurno/notturno) e produzione impianto — mese per mese</h3>
           <div className="card-note">
             {hasMonthlyDettaglio
-              ? "Consumi dalla tabella mensile F1/F2/F3 inserita nello step Consumi (compilata a mano, oppure precompilata dai dati della bolletta e confermata — stessi totali della card “Riepilogo consumi” nella Sezione B); produzione dal profilo mensile tipico applicato all'impianto proposto."
+              ? "Consumi dalla tabella mensile F1/F2/F3 inserita nello step Consumi (compilata a mano, oppure precompilata dai dati della bolletta e confermata — stessi totali della card “Riepilogo consumi” nella Sezione B); produzione mensile calcolata con PVGIS e riscalata sull'impianto proposto."
               : ocrMonthlyKwh
-              ? "Andamento mensile letto dalla bolletta caricata, riproporzionato sul consumo annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B); produzione dal profilo mensile tipico applicato all'impianto proposto."
-              : "Consumo diurno/notturno annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B), distribuito sui 12 mesi secondo una stagionalità tipica — nessun andamento mensile disponibile dalla bolletta; produzione dal profilo mensile tipico applicato all'impianto proposto."}
+              ? "Andamento mensile letto dalla bolletta caricata, riproporzionato sul consumo annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B); produzione mensile calcolata con PVGIS e riscalata sull'impianto proposto."
+              : "Consumo diurno/notturno annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B), distribuito sui 12 mesi secondo una stagionalità tipica — nessun andamento mensile disponibile dalla bolletta; produzione mensile calcolata con PVGIS e riscalata sull'impianto proposto."}
           </div>
           <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
         </div>
@@ -2100,7 +2135,7 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità tipico (non una simulazione PVGIS puntuale sul sito). Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto e perdite di sistema dell&apos;11%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
@@ -2229,7 +2264,7 @@ function PrintReport({
             <p className="pr-note" style={{ marginTop: 0 }}>Superficie disponibile e impianto proposto</p>
             <table className="pr-table">
               <tbody>
-                <tr><td>Producibilità specifica del sito</td><td className="num">{quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp/anno</td></tr>
+                <tr><td>Producibilità specifica del sito (PVGIS)</td><td className="num">{quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp/anno</td></tr>
                 <tr><td>Produzione annua totale stimata</td><td className="num">{Math.round(produzioneAnnuaTotaleKwh).toLocaleString("it-IT")} kWh</td></tr>
                 <tr><td>Superficie utile rilevata sul tetto</td><td className="num">{quote.roof.maxArrayAreaMeters2 ? `${Math.round(quote.roof.maxArrayAreaMeters2).toLocaleString("it-IT")} m²` : "n/d"}</td></tr>
                 <tr><td>Pannelli massimi installabili (stima Google)</td><td className="num">{quote.roof.maxArrayPanelsCount || "n/d"}</td></tr>
@@ -2441,9 +2476,9 @@ function PrintReport({
 
         <h3 className="pr-h3">Nota metodologica</h3>
         <p className="pr-note" style={{ fontSize: 10.5 }}>
-          La produzione dell&apos;impianto si basa sulla produzione specifica annua (kWh/kWp) inserita nello step
-          Consumi e sulla taglia di impianto proposta, distribuita sui mesi secondo un profilo di producibilità
-          zonale ricavato da simulazione PVGIS. Il fabbisogno diurno/notturno è calcolato dalla
+          La produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto
+          confermata: esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto, perdite di
+          sistema dell&apos;11%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
           una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
           disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
@@ -2598,6 +2633,7 @@ function PrintCashFlowTable({ title, rows, saldo, delta }) {
   return (
     <>
       {title && <div className="pr-cashflow-title">{title}</div>}
+      <div className="pr-cashflow-card">
       <table className="pr-cashflow-table">
         <CashFlowCols />
         <thead>
@@ -2629,6 +2665,7 @@ function PrintCashFlowTable({ title, rows, saldo, delta }) {
           ))}
         </tbody>
       </table>
+      </div>
     </>
   );
 }
@@ -2684,6 +2721,7 @@ function CashFlowTable({ title, rows, saldo, delta }) {
   return (
     <div>
       {title && <div className="cashflow-title">{title}</div>}
+      <div className="cashflow-card">
       <table className="cashflow-table">
         <CashFlowCols />
         <thead>
@@ -2715,6 +2753,7 @@ function CashFlowTable({ title, rows, saldo, delta }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

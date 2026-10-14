@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchRoof } from "../../../lib/sources";
+import { fetchRoof, fetchPvgisProduzione } from "../../../lib/sources";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -9,10 +9,9 @@ import {
 } from "../../../lib/calc";
 
 // Orchestratore principale: dato un sito (lat/lng), i consumi dichiarati (con
-// ripartizione F1/F2/F3) e la produzione annua specifica del sito — inserita
-// manualmente dall'utente nella schermata "Consumi" (tipicamente da PVGIS o
-// da una stima già in suo possesso: questa route NON chiama più PVGIS) —
-// calcola:
+// ripartizione F1/F2/F3) e la produzione specifica del sito — calcolata con
+// PVGIS v6 (vedi fetchPvgisProduzione in lib/sources.js: Sud, 25°,
+// monocristallino 2025 su tetto, perdite 11%) — calcola:
 // - il fabbisogno diurno/notturno, in base ai giorni lavorativi dichiarati;
 // - la taglia di impianto e accumulo suggerita (di partenza: resta poi
 //   modificabile a mano in dashboard, insieme al costo dell'impianto);
@@ -24,30 +23,39 @@ import {
 //   lat, lng,
 //   spesaAnnua, consumoAnnuoKwh,
 //   f1Pct, f2Pct, f3Pct,          // ripartizione consumi, sommano a 100
-//   produzioneAnnuaFvKwh,         // kWh/kWp/anno — inserito manualmente dall'utente
+//   pvgisLat?, pvgisLng?,         // posizione del tetto confermata in anteprima satellitare
+//                                 // (se assente si usano lat/lng dell'azienda)
 //   giorniLavorativi,             // 5, 6 o 7 — usato per il calcolo diurno/notturno
 //   tariffaGSE?, tariffaCER?      // default vedi lib/calc.js DEFAULTS
 // }
 export async function POST(req) {
   const body = await req.json();
-  const { lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi } = body;
+  const { lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, giorniLavorativi } = body;
 
   if (
-    [lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi].some(
+    [lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, giorniLavorativi].some(
       (v) => typeof v !== "number"
     )
   ) {
     return NextResponse.json(
       {
         error:
-          "Parametri mancanti: servono lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, produzioneAnnuaFvKwh, giorniLavorativi.",
+          "Parametri mancanti: servono lat, lng, spesaAnnua, consumoAnnuoKwh, f1Pct, f2Pct, f3Pct, giorniLavorativi.",
       },
       { status: 400 }
     );
   }
 
   try {
-    const roof = await fetchRoof(lat, lng);
+    const sitoPvgis =
+      typeof body.pvgisLat === "number" && typeof body.pvgisLng === "number"
+        ? { lat: body.pvgisLat, lng: body.pvgisLng }
+        : { lat, lng };
+    const [roof, pvgis] = await Promise.all([
+      fetchRoof(lat, lng),
+      fetchPvgisProduzione(sitoPvgis.lat, sitoPvgis.lng),
+    ]);
+    const produzioneAnnuaFvKwh = pvgis.produzioneAnnuaKwhPerKwp;
     const areaTotale = roof.segments.reduce((s, seg) => s + seg.areaMeters2, 0);
     const maxKwpTetto = roof.maxArrayAreaMeters2
       ? roof.maxArrayAreaMeters2 * DEFAULTS.kwpPerM2
@@ -93,7 +101,11 @@ export async function POST(req) {
         consumoDiurnoKwh,
         consumoNotturnoKwh,
         giorniLavorativi,
-        produzioneAnnuaFvKwh,
+        produzioneAnnuaFvKwh, // kWh/kWp/anno, da PVGIS
+        produzioneMensileKwhPerKwp: pvgis.produzioneMensileKwhPerKwp, // gen→dic, da PVGIS
+        pvgisIpotesi: pvgis.ipotesi,
+        pvgisLat: sitoPvgis.lat,
+        pvgisLng: sitoPvgis.lng,
         tariffaGSE,
         tariffaCER,
       },
