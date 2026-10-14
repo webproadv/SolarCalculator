@@ -149,3 +149,7 @@ npm run dev
 ### PDF Acquisto
 
 Accanto a "📄 PDF Noleggio", il bottone **"📄 PDF Acquisto"** riempie il template PDF Otter della proposta di acquisto diretto (`/api/pdf-acquisto`, mappatura in `buildAcquistoFieldMap` in `app/page.jsx`; i nomi dei campi sono quelli del template: `Azienda, via, cap, citta, … risp25, vant`) e scarica **"Proposta acquisto &lt;nome azienda&gt;.pdf"**. Usa gli stessi dati del preventivo e gli stessi contatti (referente/cellulare/email) del PDF Noleggio; `pec`, `iban`, `sdi`, `codfis`, telefoni, `wall` e `vant` restano vuoti perché non hanno una fonte.
+
+### Bolletta residua (mensile)
+
+Nella Sezione C (dashboard e PDF) ogni mese riporta il **prelievo da rete** (consumo diurno + notturno − autoconsumo) e la **bolletta residua** = prelievo × costo medio dell'energia (`economics().prezzoMedio`, IVA esclusa), arrotondata all'euro (`bollettaResiduaMensile` in `lib/calc.js`). La somma dei 12 mesi è il valore "Bolletta residua" usato nel flusso di cassa del noleggio (`flussoCassaNoleggio(..., bollettaResiduaAnnua)`), in dashboard e nel PDF.

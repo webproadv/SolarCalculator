@@ -9,6 +9,7 @@ import {
   DEFAULTS,
   diurnoNotturno,
   simulaAutoconsumoMensile,
+  bollettaResiduaMensile,
   economics,
   paybackYears,
   co2Evitata,
@@ -1844,9 +1845,14 @@ function Dashboard({
     numeroRate: numeroRateNoleggio,
     beneficioTotaleAnnuo: econ.beneficioTotale,
   });
+  // Bolletta residua stimata mese per mese: energia acquistata dalla rete ×
+  // costo medio dell'energia; la somma dei mesi è il valore "Bolletta residua"
+  // usato nel flusso di cassa (noleggio) qui sotto e nel PDF.
+  const bollettaMensile = bollettaResiduaMensile(autoconsumoSim.mesi, econ.prezzoMedio);
   const flusso = flussoCassaNoleggio({
     spesaAnnuaNetta: econ.spesaAnnuaNetta,
     risparmioBolletta: econ.risparmioBolletta,
+    bollettaResiduaAnnua: bollettaMensile.totale,
     ricavoGSE: econ.ricavoGSE,
     ricavoCER: econ.ricavoCER,
     deduzioneAnnua: noleggio.deduzioneAnnua,
@@ -2193,10 +2199,10 @@ function Dashboard({
 
           <h4 style={{ margin: "18px 0 4px" }}>Bilancio energetico mensile — autoconsumo e immissione in rete</h4>
           <div className="card-note">
-            Per ogni mese: autoconsumo = produzione utilizzata dall&apos;azienda (subito di giorno, più la quota di surplus spostata di notte dall&apos;accumulo, mai oltre il consumo notturno del mese); immissione = produzione − autoconsumo, venduta in rete (GSE/CER).
+            Per ogni mese: autoconsumo = produzione utilizzata dall&apos;azienda (subito di giorno, più la quota di surplus spostata di notte dall&apos;accumulo, mai oltre il consumo notturno del mese); immissione = produzione − autoconsumo, venduta in rete (GSE/CER); prelievo da rete = consumo del mese non coperto dall&apos;autoconsumo; bolletta residua = prelievo × costo medio dell&apos;energia (€ {econ.prezzoMedio.toFixed(3)}/kWh, IVA esclusa) — la somma dei mesi è la “Bolletta residua” usata nel flusso di cassa del noleggio.
           </div>
           <div className="mensile-table-wrap">
-            <table className="mensile-table" style={{ minWidth: 640 }}>
+            <table className="mensile-table" style={{ minWidth: 820 }}>
               <thead>
                 <tr>
                   <th>Mese</th>
@@ -2205,7 +2211,9 @@ function Dashboard({
                   <th style={{ textAlign: "right" }}>Produzione (kWh)</th>
                   <th style={{ textAlign: "right" }}>Autoconsumo (kWh)</th>
                   <th style={{ textAlign: "right" }}>Immissione (kWh)</th>
+                  <th style={{ textAlign: "right" }}>Prelievo da rete (kWh)</th>
                   <th style={{ textAlign: "right" }}>% autoconsumo</th>
+                  <th style={{ textAlign: "right" }}>Bolletta residua (€)</th>
                 </tr>
               </thead>
               <tbody>
@@ -2217,7 +2225,9 @@ function Dashboard({
                     <td className="mono" style={{ textAlign: "right" }}>{m.produzione.toLocaleString("it-IT")}</td>
                     <td className="mono" style={{ textAlign: "right" }}>{m.autoconsumo.toLocaleString("it-IT")}</td>
                     <td className="mono" style={{ textAlign: "right" }}>{m.immissione.toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{(m.prelievo ?? 0).toLocaleString("it-IT")}</td>
                     <td className="mono" style={{ textAlign: "right" }}>{fmtNumIt(m.autoconsumoPct * 100, 1)}%</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{bollettaMensile.mesi[i].toLocaleString("it-IT")}</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: 700, borderTop: "2px solid var(--border-strong)" }}>
@@ -2227,7 +2237,9 @@ function Dashboard({
                   <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleProduzione.toLocaleString("it-IT")}</td>
                   <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleAutoconsumo.toLocaleString("it-IT")}</td>
                   <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleImmissione.toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totalePrelievo.toLocaleString("it-IT")}</td>
                   <td className="mono" style={{ textAlign: "right" }}>{fmtNumIt(autoconsumoPct, 1)}%</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{bollettaMensile.totale.toLocaleString("it-IT")}</td>
                 </tr>
               </tbody>
             </table>
@@ -2378,6 +2390,7 @@ function Dashboard({
         noleggio={noleggio}
         numeroRateNoleggio={numeroRateNoleggio}
         flusso={flusso}
+        bollettaMensile={bollettaMensile}
       />
     </div>
   );
@@ -2410,6 +2423,7 @@ function PrintReport({
   noleggio,
   numeroRateNoleggio,
   flusso,
+  bollettaMensile,
 }) {
   const oggi = new Date().toLocaleDateString("it-IT");
   const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
@@ -2569,7 +2583,8 @@ function PrintReport({
         <PrintComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
 
         <h3 className="pr-h3">Bilancio energetico mensile (simulazione autoconsumo)</h3>
-        <table className="pr-table" style={{ fontSize: 10 }}>
+        <p className="pr-note" style={{ fontSize: 9, margin: "0 0 6px" }}>Prelievo da rete = consumo non coperto dall&apos;autoconsumo; bolletta residua = prelievo × costo medio energia (€ {econ.prezzoMedio.toFixed(3)}/kWh, IVA esclusa). La somma dei mesi è la “Bolletta residua” del flusso di cassa.</p>
+        <table className="pr-table" style={{ fontSize: 8.5 }}>
           <thead>
             <tr>
               <th>Mese</th>
@@ -2578,7 +2593,9 @@ function PrintReport({
               <th className="num">Produzione (kWh)</th>
               <th className="num">Autoconsumo (kWh)</th>
               <th className="num">Immissione (kWh)</th>
+              <th className="num">Prelievo rete (kWh)</th>
               <th className="num">% autoc.</th>
+              <th className="num">Bolletta residua (€)</th>
             </tr>
           </thead>
           <tbody>
@@ -2590,7 +2607,9 @@ function PrintReport({
                 <td className="num">{m.produzione.toLocaleString("it-IT")}</td>
                 <td className="num">{m.autoconsumo.toLocaleString("it-IT")}</td>
                 <td className="num">{m.immissione.toLocaleString("it-IT")}</td>
+                <td className="num">{(m.prelievo ?? 0).toLocaleString("it-IT")}</td>
                 <td className="num">{fmtNumIt(m.autoconsumoPct * 100, 1)}%</td>
+                <td className="num">{bollettaMensile.mesi[i].toLocaleString("it-IT")}</td>
               </tr>
             ))}
             <tr className="total">
@@ -2600,7 +2619,9 @@ function PrintReport({
               <td className="num">{autoconsumoSim.totaleProduzione.toLocaleString("it-IT")}</td>
               <td className="num">{autoconsumoSim.totaleAutoconsumo.toLocaleString("it-IT")}</td>
               <td className="num">{autoconsumoSim.totaleImmissione.toLocaleString("it-IT")}</td>
+              <td className="num">{autoconsumoSim.totalePrelievo.toLocaleString("it-IT")}</td>
               <td className="num">{fmtNumIt(autoconsumoPct, 1)}%</td>
+              <td className="num">{bollettaMensile.totale.toLocaleString("it-IT")}</td>
             </tr>
           </tbody>
         </table>
