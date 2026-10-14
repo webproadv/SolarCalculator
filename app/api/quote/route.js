@@ -11,7 +11,7 @@ import {
 // Orchestratore principale: dato un sito (lat/lng), i consumi dichiarati (con
 // ripartizione F1/F2/F3) e la produzione specifica del sito — calcolata con
 // PVGIS v6 (vedi fetchPvgisProduzione in lib/sources.js: Sud, 25°,
-// monocristallino 2025 su tetto, perdite 11%) — calcola:
+// monocristallino 2025 su tetto, perdite 12%) — calcola:
 // - il fabbisogno diurno/notturno, in base ai giorni lavorativi dichiarati;
 // - la taglia di impianto e accumulo suggerita (di partenza: resta poi
 //   modificabile a mano in dashboard, insieme al costo dell'impianto);

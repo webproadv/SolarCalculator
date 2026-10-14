@@ -1818,7 +1818,7 @@ function Dashboard({
               <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l={pvgisMensile ? "Produzione specifica annua (PVGIS)" : "Produzione specifica annua (inserita)"} />
               {pvgisMensile && (
                 <p className="hint" style={{ margin: 0 }}>
-                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()}, perdite {quote.input.pvgisIpotesi?.perditePct ?? 11}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
+                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()}, perdite {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
                 </p>
               )}
               <StatMini v={`${kwp} kWp`} l="Impianto proposto" />
@@ -2135,7 +2135,7 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto e perdite di sistema dell&apos;11%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
@@ -2478,7 +2478,7 @@ function PrintReport({
         <p className="pr-note" style={{ fontSize: 10.5 }}>
           La produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto
           confermata: esposizione a Sud, inclinazione 25°, pannelli monocristallini 2025 su tetto, perdite di
-          sistema dell&apos;11%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
+          sistema del 12%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
           una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
           disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
