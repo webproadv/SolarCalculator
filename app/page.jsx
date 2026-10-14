@@ -1825,6 +1825,7 @@ function Dashboard({
   const autoconsumoSim = simulaAutoconsumoMensile({
     monthlyProduzioneKwh: monthlyProduction,
     monthlyConsumoDiurnoKwh: monthlyDiurno,
+    monthlyConsumoNotturnoKwh: monthlyNotturno,
     batteriaKwh,
   });
   const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
@@ -2189,6 +2190,48 @@ function Dashboard({
               : "Consumo diurno/notturno annuo confermato nel preventivo (card “Riepilogo consumi” nella Sezione B), distribuito sui 12 mesi secondo una stagionalità tipica — nessun andamento mensile disponibile dalla bolletta; produzione mensile calcolata con PVGIS e riscalata sull'impianto proposto."}
           </div>
           <ComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
+
+          <h4 style={{ margin: "18px 0 4px" }}>Bilancio energetico mensile — autoconsumo e immissione in rete</h4>
+          <div className="card-note">
+            Per ogni mese: autoconsumo = produzione utilizzata dall&apos;azienda (subito di giorno, più la quota di surplus spostata di notte dall&apos;accumulo, mai oltre il consumo notturno del mese); immissione = produzione − autoconsumo, venduta in rete (GSE/CER).
+          </div>
+          <div className="mensile-table-wrap">
+            <table className="mensile-table" style={{ minWidth: 640 }}>
+              <thead>
+                <tr>
+                  <th>Mese</th>
+                  <th style={{ textAlign: "right" }}>Diurno (kWh)</th>
+                  <th style={{ textAlign: "right" }}>Notturno (kWh)</th>
+                  <th style={{ textAlign: "right" }}>Produzione (kWh)</th>
+                  <th style={{ textAlign: "right" }}>Autoconsumo (kWh)</th>
+                  <th style={{ textAlign: "right" }}>Immissione (kWh)</th>
+                  <th style={{ textAlign: "right" }}>% autoconsumo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autoconsumoSim.mesi.map((m, i) => (
+                  <tr key={i}>
+                    <td>{MESI_BREVI[i]}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{monthlyDiurno[i].toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{monthlyNotturno[i].toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{m.produzione.toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{m.autoconsumo.toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{m.immissione.toLocaleString("it-IT")}</td>
+                    <td className="mono" style={{ textAlign: "right" }}>{fmtNumIt(m.autoconsumoPct * 100, 1)}%</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700, borderTop: "2px solid var(--border-strong)" }}>
+                  <td>Totale</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{monthlyDiurno.reduce((t, v) => t + v, 0).toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{monthlyNotturno.reduce((t, v) => t + v, 0).toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleProduzione.toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleAutoconsumo.toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{autoconsumoSim.totaleImmissione.toLocaleString("it-IT")}</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{fmtNumIt(autoconsumoPct, 1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -2307,7 +2350,7 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus spostata di notte dall'accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
@@ -2535,6 +2578,7 @@ function PrintReport({
               <th className="num">Produzione (kWh)</th>
               <th className="num">Autoconsumo (kWh)</th>
               <th className="num">Immissione (kWh)</th>
+              <th className="num">% autoc.</th>
             </tr>
           </thead>
           <tbody>
@@ -2546,6 +2590,7 @@ function PrintReport({
                 <td className="num">{m.produzione.toLocaleString("it-IT")}</td>
                 <td className="num">{m.autoconsumo.toLocaleString("it-IT")}</td>
                 <td className="num">{m.immissione.toLocaleString("it-IT")}</td>
+                <td className="num">{fmtNumIt(m.autoconsumoPct * 100, 1)}%</td>
               </tr>
             ))}
             <tr className="total">
@@ -2555,6 +2600,7 @@ function PrintReport({
               <td className="num">{autoconsumoSim.totaleProduzione.toLocaleString("it-IT")}</td>
               <td className="num">{autoconsumoSim.totaleAutoconsumo.toLocaleString("it-IT")}</td>
               <td className="num">{autoconsumoSim.totaleImmissione.toLocaleString("it-IT")}</td>
+              <td className="num">{fmtNumIt(autoconsumoPct, 1)}%</td>
             </tr>
           </tbody>
         </table>
@@ -2652,8 +2698,8 @@ function PrintReport({
           confermata: esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing), perdite di
           sistema del 12%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
-          una simulazione mese per mese (autoconsumo mensile = minimo tra produzione e consumo diurno + accumulo
-          disponibile, sommato sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
+          una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus
+          spostata di notte dall&apos;accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.
           La tariffa CER ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia
           immessa — nella realtà si applica solo alla quota effettivamente condivisa entro la comunità energetica.
           Questo è un documento indicativo, non un preventivo tecnico vincolante.
