@@ -415,6 +415,7 @@ export default function Page() {
   // orientamento -180/+180° (0 = Sud, +90 = Ovest, -90 = Est).
   const [inclinazionePannelli, setInclinazionePannelli] = useState("25");
   const [orientamentoPannelli, setOrientamentoPannelli] = useState("0");
+  const [perditeSistema, setPerditeSistema] = useState("12"); // % perdite di sistema usate da PVGIS
   // Anteprima della produzione specifica (kWh/kWp annui) calcolata da PVGIS per
   // la geometria indicata: l'utente può cambiare inclinazione/orientamento e
   // ricalcolare l'anteprima finché non è soddisfatto, poi conferma. Solo dopo la
@@ -514,6 +515,8 @@ export default function Page() {
       const ipSalvate = saved.quote?.input;
       if (Number.isFinite(ipSalvate?.inclinazioneGradi)) setInclinazionePannelli(String(ipSalvate.inclinazioneGradi));
       if (Number.isFinite(ipSalvate?.orientamentoGradi)) setOrientamentoPannelli(String(ipSalvate.orientamentoGradi));
+      // progetti salvati prima del campo "Perdite di sistema": valeva sempre 12%
+      setPerditeSistema(String(Number.isFinite(ipSalvate?.pvgisIpotesi?.perditePct) ? ipSalvate.pvgisIpotesi.perditePct : 12));
       setPvgisAnteprima(null);
       setSatView(null);
       setSatMapKey((k) => k + 1);
@@ -534,6 +537,7 @@ export default function Page() {
                 lng: quoteSalvato.input.lng,
                 inclinazioneGradi: quoteSalvato.input.inclinazioneGradi,
                 orientamentoGradi: quoteSalvato.input.orientamentoGradi,
+                perditeSistemaPct: quoteSalvato.input.pvgisIpotesi?.perditePct,
               }),
             });
             const pv = await rp.json();
@@ -669,17 +673,19 @@ export default function Page() {
     inclinazionePannelli !== "" && Number.isFinite(Number(inclinazionePannelli)) && Number(inclinazionePannelli) >= 0 && Number(inclinazionePannelli) <= 90;
   const orientamentoValido =
     orientamentoPannelli !== "" && Number.isFinite(Number(orientamentoPannelli)) && Number(orientamentoPannelli) >= -180 && Number(orientamentoPannelli) <= 180;
+  const perditeValide =
+    perditeSistema !== "" && Number.isFinite(Number(perditeSistema)) && Number(perditeSistema) >= 0 && Number(perditeSistema) <= 50;
   // Punto su cui PVGIS calcola (vista satellitare confermata, altrimenti coordinate
   // dell'azienda). Arrotondato a 3 decimali (~100 m): la griglia PVGIS è più larga.
   const pvgisSito = satView ? { lat: satView.lat, lng: satView.lng } : coordValide ? { lat: Number(company.lat), lng: Number(company.lng) } : null;
   const pvgisChiaveCorrente =
-    pvgisSito && inclinazioneValida && orientamentoValido
-      ? `${pvgisSito.lat.toFixed(3)}|${pvgisSito.lng.toFixed(3)}|${Number(inclinazionePannelli)}|${Number(orientamentoPannelli)}`
+    pvgisSito && inclinazioneValida && orientamentoValido && perditeValide
+      ? `${pvgisSito.lat.toFixed(3)}|${pvgisSito.lng.toFixed(3)}|${Number(inclinazionePannelli)}|${Number(orientamentoPannelli)}|${Number(perditeSistema)}`
       : null;
   // L'anteprima è "confermabile" solo se calcolata proprio con i valori attuali.
   const anteprimaAggiornata = !!pvgisAnteprima && pvgisAnteprima.chiave === pvgisChiaveCorrente;
   const aziendaCompleta =
-    inclinazioneValida && orientamentoValido && !!company && !!String(company.ragioneSociale || "").trim() && coordValide && anteprimaAggiornata;
+    inclinazioneValida && orientamentoValido && perditeValide && !!company && !!String(company.ragioneSociale || "").trim() && coordValide && anteprimaAggiornata;
 
   async function calcolaAnteprimaPvgis() {
     if (!pvgisSito || !pvgisChiaveCorrente) return;
@@ -694,6 +700,7 @@ export default function Page() {
           lng: pvgisSito.lng,
           inclinazioneGradi: Number(inclinazionePannelli),
           orientamentoGradi: Number(orientamentoPannelli),
+          perditeSistemaPct: Number(perditeSistema),
         }),
       });
       const data = await r.json();
@@ -918,6 +925,7 @@ export default function Page() {
           // punto su cui PVGIS calcola la produzione (altrimenti l'indirizzo).
           inclinazioneGradi: Number(inclinazionePannelli),
           orientamentoGradi: Number(orientamentoPannelli),
+          perditeSistemaPct: Number(perditeSistema),
           pvgisLat: satView ? satView.lat : undefined,
           pvgisLng: satView ? satView.lng : undefined,
           giorniLavorativi: giorniEffettivi,
@@ -1110,9 +1118,9 @@ export default function Page() {
                   </div>
 
                   <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
-                    <h4 style={{ margin: "0 0 4px" }}>Pannelli: inclinazione e orientamento</h4>
+                    <h4 style={{ margin: "0 0 4px" }}>Pannelli: inclinazione, orientamento e perdite di sistema</h4>
                     <p className="hint" style={{ marginTop: 0 }}>
-                      Quando la mappa inquadra il tetto giusto, indica come saranno posizionati i pannelli: la produzione dell&apos;impianto viene calcolata con PVGIS su questa posizione e con questi valori.
+                      Quando la mappa inquadra il tetto giusto, indica come saranno posizionati i pannelli e le perdite di sistema: la produzione dell&apos;impianto viene calcolata con PVGIS su questa posizione e con questi valori.
                     </p>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       <div className="field">
@@ -1142,14 +1150,27 @@ export default function Page() {
                         <p className="hint">0 = Sud, +90 = Ovest, −90 = Est, ±180 = Nord. Oppure clicca sulla bussola qui sotto.</p>
                       </div>
                     </div>
+                    <div className="field" style={{ maxWidth: 260 }}>
+                      <label>Perdite di sistema (%)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        placeholder="es. 12"
+                        value={perditeSistema}
+                        onChange={(e) => setPerditeSistema(e.target.value)}
+                      />
+                      <p className="hint">Cavi, inverter, sporcizia, ombreggiamenti, mismatch… Lo standard PVGIS è 14%; per impianti industriali ben progettati si usa spesso 10–12%.</p>
+                    </div>
                     <div style={{ marginTop: 6 }}>
                       <p className="hint" style={{ textAlign: "center", marginBottom: 4 }}>
                         Bussola (nord in alto, come sulla mappa): clicca o trascina nella direzione verso cui è rivolta la falda.
                       </p>
                       <OrientamentoDial value={orientamentoPannelli} onChange={setOrientamentoPannelli} />
                     </div>
-                    {(!inclinazioneValida || !orientamentoValido) && (
-                      <div className="error-box">Inclinazione tra 0° e 90°, orientamento tra −180° e +180°.</div>
+                    {(!inclinazioneValida || !orientamentoValido || !perditeValide) && (
+                      <div className="error-box">Inclinazione tra 0° e 90°, orientamento tra −180° e +180°, perdite di sistema tra 0% e 50%.</div>
                     )}
 
                     <div className="btn-row" style={{ justifyContent: "flex-start", gap: 12, marginTop: 4 }}>
@@ -2009,7 +2030,7 @@ function Dashboard({
               <StatMini v={`${quote.input.produzioneAnnuaFvKwh.toLocaleString("it-IT")} kWh/kWp`} l={pvgisMensile ? "Produzione specifica annua (PVGIS)" : "Produzione specifica annua (inserita)"} />
               {pvgisMensile && (
                 <p className="hint" style={{ margin: 0 }}>
-                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()} (Free standing), perdite {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
+                  Ipotesi PVGIS: esposizione {quote.input.pvgisIpotesi?.orientamento || "Sud"}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, {String(quote.input.pvgisIpotesi?.tecnologia || "monocristallino 2025, su tetto").toLowerCase()} (Free standing), perdite di sistema {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media {quote.input.pvgisIpotesi?.periodo || "2014-2024"}.
                 </p>
               )}
               <StatMini v={`${kwp} kWp`} l="Impianto proposto" />
@@ -2395,7 +2416,7 @@ function Dashboard({
       </section>
 
       <div className="footnote">
-        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del 12%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus spostata di notte dall'accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
+        <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del {quote.input.pvgisIpotesi?.perditePct ?? 12}%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus spostata di notte dall'accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
         ({quote.input.tariffaCER} €/kWh) è applicata per semplicità all&apos;intera energia immessa — nella realtà
         si applica solo alla quota effettivamente condivisa entro la comunità energetica. Questo è un MVP dimostrativo: i risultati sono indicativi, non un
         preventivo tecnico vincolante.
@@ -2815,7 +2836,7 @@ function PrintReport({
         <p className="pr-note" style={{ fontSize: 10.5 }}>
           La produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto
           confermata: esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing), perdite di
-          sistema del 12%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
+          sistema del {quote.input.pvgisIpotesi?.perditePct ?? 12}%, media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla
           ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con
           una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus
           spostata di notte dall&apos;accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa.

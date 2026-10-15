@@ -12,7 +12,7 @@ import {
 // ripartizione F1/F2/F3) e la produzione specifica del sito — calcolata con
 // PVGIS v6 (vedi fetchPvgisProduzione in lib/sources.js: inclinazione e
 // orientamento indicati dal commerciale, monocristallino 2025 su tetto Free
-// standing, perdite 12%) — calcola:
+// standing, perdite di sistema indicate dal commerciale) — calcola:
 // - il fabbisogno diurno/notturno, in base ai giorni lavorativi dichiarati;
 // - la taglia di impianto e accumulo suggerita (di partenza: resta poi
 //   modificabile a mano in dashboard, insieme al costo dell'impianto);
@@ -24,6 +24,7 @@ import {
 //   lat, lng,
 //   spesaAnnua, consumoAnnuoKwh,
 //   f1Pct, f2Pct, f3Pct,          // ripartizione consumi, sommano a 100
+//   perditeSistemaPct (0-50, default 12),
 //   inclinazioneGradi, orientamentoGradi,  // pannelli: 0-90° e -180/+180° (0 = Sud, +90 = Ovest, -90 = Est)
 //   pvgisLat?, pvgisLng?,         // posizione del tetto confermata in anteprima satellitare
 //                                 // (se assente si usano lat/lng dell'azienda)
@@ -48,10 +49,10 @@ export async function POST(req) {
     );
   }
 
-  const geometria = normalizzaGeometria(body.inclinazioneGradi, body.orientamentoGradi);
+  const geometria = normalizzaGeometria(body.inclinazioneGradi, body.orientamentoGradi, body.perditeSistemaPct);
   if (!geometria) {
     return NextResponse.json(
-      { error: "Inclinazione (0-90°) e orientamento (da -180° a +180°, 0 = Sud) dei pannelli mancanti o non validi." },
+      { error: "Inclinazione (0-90°), orientamento (da -180° a +180°, 0 = Sud) e perdite di sistema (0-50%) dei pannelli mancanti o non validi." },
       { status: 400 }
     );
   }
