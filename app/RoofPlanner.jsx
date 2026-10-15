@@ -4,6 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RoofScene3D from "./RoofScene3D";
 import OrientamentoDial from "./OrientamentoDial";
+import { decodificaRilievo, stimaPiano } from "../lib/rilievo";
 import {
   MODULO,
   POSA_DEFAULT,
@@ -22,6 +23,13 @@ import {
 // moduli Trina Vertex S+ 505 W (1961 × 1134 mm) dentro le aree e confronta
 // quanti ne entrano con quelli richiesti dal dimensionamento. Da lì si genera
 // la vista 3D e si salvano le immagini per il PDF.
+//
+// Rilievo reale: su richiesta si scarica da Google Solar API il modello delle
+// superfici (DSM) e la foto aerea del sito; la vista 3D usa allora il rilievo
+// vero (tetti, alberi, edifici vicini) con la foto stesa sopra, e i moduli
+// poggiano sul piano della falda misurato. Con più aree, i moduli richiesti si
+// ripartiscono "in ordine" (la prima si riempie, le altre prendono il resto) o
+// "uniformemente" (stessa quantità su ogni area, nei limiti della capacità).
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -60,8 +68,11 @@ function riduciImmagine(dataUrl, maxW, q = 0.82) {
     img.src = dataUrl;
   });
 }
-function firmaLayout(aree, n) {
-  const s = JSON.stringify([aree.map((a) => [a.ring, a.ostacoli, a.tipo, a.tilt, a.orient, a.disposizione, a.orientamentoModulo, a.margine, a.allinea]), n]);
+function firmaLayout(aree, n, ripartizione = "sequenziale") {
+  const base = [aree.map((a) => [a.ring, a.ostacoli, a.tipo, a.tilt, a.orient, a.disposizione, a.orientamentoModulo, a.margine, a.allinea]), n];
+  // la ripartizione entra nella firma solo se diversa dal default (compatibile con i salvataggi precedenti)
+  if (ripartizione !== "sequenziale") base.push(ripartizione);
+  const s = JSON.stringify(base);
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return String(h);
@@ -81,6 +92,7 @@ export default function RoofPlanner({
 }) {
   const aree = useMemo(() => posa?.aree || [], [posa]);
   const altezzaM = posa?.altezzaM ?? 8;
+  const ripartizione = posa?.ripartizione === "uniforme" ? "uniforme" : "sequenziale";
   const orientForm = Number.isFinite(Number(orientamentoForm)) ? Number(orientamentoForm) : 0;
   const tiltForm = Number.isFinite(Number(inclinazioneForm)) ? Number(inclinazioneForm) : 25;
 
@@ -95,6 +107,9 @@ export default function RoofPlanner({
   const [selezionata, setSelezionata] = useState(null);
   const [scena3d, setScena3d] = useState(null);
   const [lavoro, setLavoro] = useState("");
+  const [rilievo, setRilievo] = useState(null);
+  const [rilievoErr, setRilievoErr] = useState("");
+  const [fotoGoogle, setFotoGoogle] = useState(true);
   const ref3d = useRef(null);
 
   // specchi per i gestori dell'evento della mappa (registrati una sola volta)
@@ -102,13 +117,15 @@ export default function RoofPlanner({
   const bozzaRef = useRef([]);
   const areeRef = useRef([]);
   const selezRef = useRef(null);
+  const posaRef = useRef(null);
+  useEffect(() => { posaRef.current = posa; }, [posa]);
   useEffect(() => { modoRef.current = modo; }, [modo]);
   useEffect(() => { bozzaRef.current = bozza; }, [bozza]);
   useEffect(() => { areeRef.current = aree; }, [aree]);
   useEffect(() => { selezRef.current = selezionata; }, [selezionata]);
 
   const aggiornaPosa = useCallback(
-    (patch) => onPosaChange({ aree, altezzaM, immagini: posa?.immagini || null, ...patch }),
+    (patch) => onPosaChange({ ...(posa || {}), aree, altezzaM, immagini: posa?.immagini || null, ...patch }),
     [onPosaChange, aree, altezzaM, posa]
   );
 
@@ -133,10 +150,15 @@ export default function RoofPlanner({
       });
       return { ...layout, poligono, ostacoliLocali: ostacoli };
     });
-    const dist = distribuisciPannelli(layouts, pannelliRichiesti, norm360(180 + orientForm));
+    const dist = distribuisciPannelli(layouts, pannelliRichiesti, ripartizione);
     return { layouts, dist };
-  }, [aree, centro, pannelliRichiesti, orientForm]);
+  }, [aree, centro, pannelliRichiesti, ripartizione]);
 
+  // piano medio di ogni area dal rilievo reale (pendenza e verso della falda)
+  const piani = useMemo(
+    () => (rilievo ? calcolo.layouts.map((l) => stimaPiano(rilievo, l.poligono, l.ostacoliLocali)) : []),
+    [rilievo, calcolo]
+  );
   // dati GeoJSON per la mappa
   const geo = useMemo(() => {
     const pol = (pts) => {
@@ -289,6 +311,56 @@ export default function RoofPlanner({
     else map.doubleClickZoom.enable();
   }, [modo, mapPronta]);
 
+  /* ------------------------------------------------------ rilievo reale */
+
+  useEffect(() => {
+    setRilievo(null);
+    setRilievoErr("");
+    setScena3d(null);
+  }, [centro.lat, centro.lng]);
+
+  async function caricaRilievo() {
+    setLavoro("Scarico il rilievo reale da Google Solar…");
+    setRilievoErr("");
+    try {
+      const r = await fetch("/api/solar-layers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: centro.lat, lng: centro.lng }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
+      setRilievo(decodificaRilievo(j));
+      setFotoGoogle(true);
+      setScena3d(null);
+    } catch (e) {
+      setRilievoErr(e.message);
+    } finally {
+      setLavoro("");
+    }
+  }
+
+  // la foto Google va sulla mappa (sotto le aree) così si disegna sulla stessa immagine del rilievo
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapPronta) return;
+    const pulisci = () => {
+      if (map.getLayer("google-foto-layer")) map.removeLayer("google-foto-layer");
+      if (map.getSource("google-foto")) map.removeSource("google-foto");
+    };
+    pulisci();
+    if (!rilievo || !fotoGoogle) return;
+    const E = rilievo.estensioneM;
+    const c = (x, y) => localeToLngLat(centro, { x, y });
+    map.addSource("google-foto", {
+      type: "image",
+      url: rilievo.fotoDataUrl,
+      coordinates: [c(-E, E), c(E, E), c(E, -E), c(-E, -E)],
+    });
+    map.addLayer({ id: "google-foto-layer", type: "raster", source: "google-foto", paint: { "raster-opacity": 1, "raster-fade-duration": 0 } }, "aree-fill");
+    return pulisci;
+  }, [rilievo, fotoGoogle, mapPronta, centro]);
+
   /* --------------------------------------------------------- disegno */
 
   const chiudiBozzaRef = useRef(() => {});
@@ -317,8 +389,9 @@ export default function RoofPlanner({
         setErrore("L'ostacolo deve stare dentro un'area: disegna prima l'area o selezionala.");
       } else {
         onPosaChange({
+          ...(posaRef.current || {}),
           aree: areeRef.current.map((a) => (a.id === target.id ? { ...a, ostacoli: [...(a.ostacoli || []), pulita] } : a)),
-          altezzaM, immagini: posa?.immagini || null,
+          altezzaM, immagini: posaRef.current?.immagini || null,
         });
       }
       setBozza([]);
@@ -357,7 +430,7 @@ export default function RoofPlanner({
       margine: piano ? POSA_DEFAULT.marginePiano : POSA_DEFAULT.margineFalda,
       allinea: true,
     };
-    onPosaChange({ aree: [...aree, area], altezzaM, immagini: posa?.immagini || null });
+    aggiornaPosa({ aree: [...aree, area] });
     setSelezionata(area.id);
     setDaConfigurare(null);
   }
@@ -368,6 +441,14 @@ export default function RoofPlanner({
   function eliminaArea(id) {
     aggiornaPosa({ aree: aree.filter((a) => a.id !== id) });
     if (selezionata === id) setSelezionata(null);
+  }
+  function spostaArea(id, delta) {
+    const i = aree.findIndex((a) => a.id === id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= aree.length) return;
+    const copia = aree.slice();
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+    aggiornaPosa({ aree: copia });
   }
   function rimuoviOstacoli(id) {
     modificaArea(id, { ostacoli: [] });
@@ -399,6 +480,35 @@ export default function RoofPlanner({
     setLavoro("Preparo la vista 3D…");
     setErrore("");
     try {
+      const pannelli = [];
+      calcolo.layouts.forEach((l, i) => {
+        l.pannelli.slice(0, calcolo.dist.usati[i]).forEach((p) =>
+          pannelli.push({ cx: p.cx, cy: p.cy, az: p.az, tilt: p.tilt, portrait: p.portrait, areaIdx: i })
+        );
+      });
+      const areeScena = aree.map((a, i) => ({
+        tipo: a.tipo,
+        poligono: calcolo.layouts[i].poligono,
+        ostacoli: calcolo.layouts[i].ostacoliLocali,
+        pendenzaDeg: a.tipo === "falda" ? a.tilt : 0,
+        azimutDiscesa: calcolo.layouts[i].azimutEffettivo,
+        piano: piani[i] || null,
+      }));
+
+      if (rilievo) {
+        // rilievo reale: foto e quote Google, già sulla stessa griglia locale
+        const E = rilievo.estensioneM;
+        setScena3d({
+          bounds: { xmin: -E, xmax: E, ymin: -E, ymax: E },
+          texture: rilievo.fotoDataUrl,
+          altezzaM,
+          aree: areeScena,
+          pannelli,
+          rilievo,
+        });
+        return;
+      }
+
       LAYER_OVERLAY.forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, "visibility", "none"));
       await aspettaMappa(map);
       const textureGrezza = map.getCanvas().toDataURL("image/jpeg", 0.9);
@@ -407,23 +517,11 @@ export default function RoofPlanner({
       const b = map.getBounds();
       const sw = lngLatToLocale(centro, [b.getWest(), b.getSouth()]);
       const ne = lngLatToLocale(centro, [b.getEast(), b.getNorth()]);
-      const pannelli = [];
-      calcolo.layouts.forEach((l, i) => {
-        l.pannelli.slice(0, calcolo.dist.usati[i]).forEach((p) =>
-          pannelli.push({ cx: p.cx, cy: p.cy, az: p.az, tilt: p.tilt, portrait: p.portrait, areaIdx: i })
-        );
-      });
       setScena3d({
         bounds: { xmin: sw.x, xmax: ne.x, ymin: sw.y, ymax: ne.y },
         texture,
         altezzaM,
-        aree: aree.map((a, i) => ({
-          tipo: a.tipo,
-          poligono: calcolo.layouts[i].poligono,
-          ostacoli: calcolo.layouts[i].ostacoliLocali,
-          pendenzaDeg: a.tipo === "falda" ? a.tilt : 0,
-          azimutDiscesa: calcolo.layouts[i].azimutEffettivo,
-        })),
+        aree: areeScena.map((a) => ({ ...a, piano: null })),
         pannelli,
       });
     } catch (e) {
@@ -447,6 +545,8 @@ export default function RoofPlanner({
         richiesti: Math.round(pannelliRichiesti),
         posizionati: calcolo.dist.posizionati,
         capacita: calcolo.dist.capacitaTotale,
+        ripartizione: aree.length > 1 ? ripartizione : null,
+        rilievoReale: Boolean(rilievo),
         kwp: calcolo.dist.kwp,
         kwpMassimi: calcolo.dist.kwpMassimi,
         modulo: MODULO.nome,
@@ -463,7 +563,7 @@ export default function RoofPlanner({
         })),
       };
       aggiornaPosa({
-        immagini: { pianta, v3d1: v1, v3d2: v2, firma: firmaLayout(aree, pannelliRichiesti), riepilogo, data: new Date().toISOString() },
+        immagini: { pianta, v3d1: v1, v3d2: v2, firma: firmaLayout(aree, pannelliRichiesti, ripartizione), riepilogo, data: new Date().toISOString() },
       });
     } catch (e) {
       setErrore(`Immagini non salvate: ${e.message}`);
@@ -488,7 +588,7 @@ export default function RoofPlanner({
   const selLayout = selIdx >= 0 ? calcolo.layouts[selIdx] : null;
   const { dist } = calcolo;
   const immagini = posa?.immagini || null;
-  const immaginiAttuali = immagini && immagini.firma === firmaLayout(aree, pannelliRichiesti);
+  const immaginiAttuali = immagini && immagini.firma === firmaLayout(aree, pannelliRichiesti, ripartizione);
   const mancanti = dist.mancanti;
 
   if (!MAPBOX_TOKEN) {
@@ -553,6 +653,56 @@ export default function RoofPlanner({
 
       {errore && <div className="error-box" style={{ marginTop: 8 }}>{errore}</div>}
 
+      <div className="posa-rilievo">
+        {!rilievo ? (
+          <>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={caricaRilievo} disabled={Boolean(lavoro)}>
+              ⛰ Carica rilievo reale (foto e quote Google)
+            </button>
+            <span className="hint" style={{ margin: 0 }}>
+              Per una vista 3D con il rilievo vero di tetti, alberi ed edifici vicini. Carica il rilievo <em>prima</em> di disegnare le aree: ti disegni sulla stessa foto.
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="posa-rilievo-ok">
+              Rilievo Google attivo{rilievo.qualita ? ` · qualità ${rilievo.qualita}` : ""}{rilievo.data ? ` · rilievo del ${rilievo.data}` : ""}
+            </span>
+            <label className="posa-check" style={{ margin: 0 }}>
+              <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
+              Mostra la foto Google sulla mappa
+            </label>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); }}>
+              Rimuovi rilievo
+            </button>
+            {!rilievo.georefEsatta && (
+              <span className="hint" style={{ color: "var(--warn, #b45309)", margin: 0 }}>
+                Georeferenziazione approssimata: la foto potrebbe non coincidere perfettamente con la mappa.
+              </span>
+            )}
+          </>
+        )}
+      </div>
+      {rilievoErr && <div className="error-box" style={{ marginTop: 8 }}>{rilievoErr}</div>}
+
+      {aree.length > 1 && (
+        <div className="posa-ripartizione">
+          <div className="posa-ripartizione-titolo">Come distribuire i {Math.round(pannelliRichiesti)} moduli tra le {aree.length} aree</div>
+          <label className={`posa-radio ${ripartizione === "sequenziale" ? "on" : ""}`}>
+            <input type="radio" name="ripartizione" checked={ripartizione === "sequenziale"} onChange={() => aggiornaPosa({ ripartizione: "sequenziale" })} />
+            <span>
+              <strong>In ordine</strong> — la prima area si riempie, la seconda prende il resto
+            </span>
+          </label>
+          <label className={`posa-radio ${ripartizione === "uniforme" ? "on" : ""}`}>
+            <input type="radio" name="ripartizione" checked={ripartizione === "uniforme"} onChange={() => aggiornaPosa({ ripartizione: "uniforme" })} />
+            <span>
+              <strong>Uniforme</strong> — stessa quantità su ogni area (es. metà e metà), nei limiti della capacità di ciascuna
+            </span>
+          </label>
+        </div>
+      )}
+
       <div className="posa-mapwrap">
         <div ref={containerRef} className="posa-map" />
         {daConfigurare && (
@@ -585,7 +735,7 @@ export default function RoofPlanner({
               className={`posa-area-chip ${a.id === selezionata ? "active" : ""}`}
               onClick={() => setSelezionata(a.id === selezionata ? null : a.id)}
             >
-              <strong>{a.nome}</strong> · {a.tipo === "piano" ? "piano" : "falda"} · {dist.usati[i]}/{calcolo.layouts[i].capacita} moduli
+              {aree.length > 1 && ripartizione === "sequenziale" ? `${i + 1}. ` : ""}<strong>{a.nome}</strong> · {a.tipo === "piano" ? "piano" : "falda"} · {dist.usati[i]}/{calcolo.layouts[i].capacita} moduli
             </button>
           ))}
         </div>
@@ -604,6 +754,12 @@ export default function RoofPlanner({
               <button type="button" className={sel.tipo === "piano" ? "on" : ""} onClick={() => sel.tipo !== "piano" && cambiaTipo(sel, "piano")}>Tetto piano</button>
               <button type="button" className={sel.tipo === "falda" ? "on" : ""} onClick={() => sel.tipo !== "falda" && cambiaTipo(sel, "falda")}>Tetto a falda</button>
             </div>
+            {aree.length > 1 && (
+              <div className="posa-order" title="Ordine di riempimento (conta con la ripartizione «In ordine»)">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => spostaArea(sel.id, -1)} disabled={selIdx === 0} aria-label="Sposta prima">▲</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => spostaArea(sel.id, 1)} disabled={selIdx === aree.length - 1} aria-label="Sposta dopo">▼</button>
+              </div>
+            )}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => eliminaArea(sel.id)}>Elimina area</button>
           </div>
 
@@ -687,6 +843,32 @@ export default function RoofPlanner({
               </>
             )}
           </p>
+          {rilievo && piani[selIdx] && (() => {
+            const pi = piani[selIdx];
+            const pend = Math.round(pi.pendenzaDeg);
+            const ver = orientApp(pi.azimutDiscesa);
+            const piatto = pi.pendenzaDeg < 4;
+            return (
+              <div className="posa-rilevato">
+                <span>
+                  Dal rilievo Google: pendenza <strong>{pend}°</strong>
+                  {piatto ? " (copertura praticamente piana)" : <>, falda rivolta a <strong>{ver}°</strong> (0 = Sud)</>}
+                  {pi.rms > 0.35 ? " · superficie irregolare, valore poco affidabile" : ""}.
+                </span>
+                {sel.tipo === "falda" && !piatto && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => modificaArea(sel.id, { tilt: Math.max(0, Math.min(60, pend)), orient: Math.max(-180, Math.min(180, ver)) })}
+                  >
+                    Usa valori rilevati
+                  </button>
+                )}
+                {sel.tipo === "falda" && piatto && <span className="hint" style={{ margin: 0 }}>Sembra un tetto piano: valuta di cambiare il tipo.</span>}
+                {sel.tipo === "piano" && !piatto && <span className="hint" style={{ margin: 0 }}>Sembra una falda: valuta di cambiare il tipo.</span>}
+              </div>
+            );
+          })()}
           {diffGradi(orientApp(selLayout.azimutEffettivo), orientForm) > 5 && sel.tipo !== "falda" && sel.disposizione !== "estovest" && (
             <p className="hint" style={{ color: "var(--warn, #b45309)" }}>
               Attenzione: l&apos;orientamento di posa differisce da quello usato per calcolare la produzione ({orientForm}°): la stima PVGIS resta riferita a quel valore.
@@ -697,15 +879,15 @@ export default function RoofPlanner({
 
       <div className="posa-3d-head">
         <div className="field" style={{ margin: 0 }}>
-          <label>Altezza del tetto/gronda (m) — solo per la vista 3D</label>
+          <label>{rilievo ? "Altezza del tetto (m) — non usata con il rilievo reale" : "Altezza del tetto/gronda (m) — solo per la vista 3D"}</label>
           <input
-            type="number" min="2" max="40" step="0.5" value={altezzaM}
+            type="number" min="2" max="40" step="0.5" value={altezzaM} disabled={Boolean(rilievo)}
             onChange={(e) => aggiornaPosa({ altezzaM: Math.max(2, Math.min(40, Number(e.target.value) || 8)) })}
             style={{ maxWidth: 120 }}
           />
         </div>
         <button type="button" className="btn btn-primary" onClick={generaVista3d} disabled={!dist.posizionati || !mapPronta || Boolean(lavoro)}>
-          {scena3d ? "Aggiorna vista 3D" : "Genera vista 3D"}
+          {scena3d ? "Aggiorna vista 3D" : rilievo ? "Genera vista 3D con rilievo reale" : "Genera vista 3D"}
         </button>
       </div>
       {!aree.length && <p className="hint">Disegna almeno un&apos;area del tetto per vedere la disposizione dei moduli e generare la vista 3D.</p>}
@@ -727,7 +909,9 @@ export default function RoofPlanner({
             <button type="button" className="btn btn-ghost" onClick={scaricaVista}>Scarica immagine 3D</button>
           </div>
           <p className="hint">
-            Simulazione indicativa: la quota e le pareti degli edifici sono stimate dall&apos;altezza indicata, non da un rilievo. Verificare ingombri, ombreggiamenti e portata della copertura in sopralluogo.
+            {scena3d.rilievo
+              ? "Rilievo e foto: Imagery © Google (Solar API). Le quote hanno risoluzione di circa 50 cm: i bordi dei tetti sono addolciti. Simulazione indicativa: verificare ingombri, ombreggiamenti e portata della copertura in sopralluogo."
+              : "Simulazione indicativa: la quota e le pareti degli edifici sono stimate dall'altezza indicata, non da un rilievo (carica il rilievo reale per una vista fedele). Verificare ingombri, ombreggiamenti e portata della copertura in sopralluogo."}
           </p>
         </div>
       )}

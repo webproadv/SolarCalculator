@@ -2653,7 +2653,14 @@ function PrintReport({
             </tbody>
           </table>
           <p className="pr-note">
-            Moduli {posaPdf.riepilogo?.modulo} (505 Wp, 1961 × 1134 mm). Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto satellitare, con distanze dai bordi e interfila per evitare ombreggiamenti reciproci; quote e pareti degli edifici nella vista 3D sono stimate. Ingombri, ombreggiamenti, portata della copertura e vincoli vanno verificati in sopralluogo.
+            Moduli {posaPdf.riepilogo?.modulo} (505 Wp, 1961 × 1134 mm).
+            {posaPdf.riepilogo?.ripartizione
+              ? ` Ripartizione dei moduli tra le aree: ${posaPdf.riepilogo.ripartizione === "uniforme" ? "uniforme (stessa quantità su ogni area, nei limiti della capacità)" : "in ordine (la prima area si riempie, le successive ricevono il resto)"}.`
+              : ""}
+            {posaPdf.riepilogo?.rilievoReale
+              ? " Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto aerea; la vista 3D usa il rilievo delle superfici e la foto aerea di Google Solar API (Imagery © Google), con quote a risoluzione di circa 50 cm."
+              : " Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto satellitare; quote e pareti degli edifici nella vista 3D sono stimate."}
+            {" "}Distanze dai bordi e interfila sono impostate per evitare ombreggiamenti reciproci. Ingombri, ombreggiamenti, portata della copertura e vincoli vanno verificati in sopralluogo.
           </p>
           <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4</span></div>
         </div>

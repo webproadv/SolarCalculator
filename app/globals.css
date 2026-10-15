@@ -522,3 +522,14 @@ th.num{ text-align:right; }
 .posa-views{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
 .posa-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
 @media (max-width:720px){ .posa-summary{ grid-template-columns:1fr; } .posa-edit-grid{ grid-template-columns:1fr; } }
+
+/* rilievo reale e ripartizione moduli */
+.posa-rilievo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.posa-rilievo-ok { font-size: 13px; font-weight: 600; color: #047857; }
+.posa-ripartizione { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line, #e2e8f0); border-radius: 10px; background: rgba(148, 163, 184, 0.08); display: grid; gap: 6px; }
+.posa-ripartizione-titolo { font-size: 13px; font-weight: 700; }
+.posa-radio { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+.posa-radio.on { border-color: #2563eb; background: rgba(37, 99, 235, 0.08); }
+.posa-radio input { margin-top: 3px; }
+.posa-order { display: inline-flex; gap: 2px; }
+.posa-rilevato { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: rgba(5, 150, 105, 0.09); }

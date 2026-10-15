@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { quotaIn, quotaPiano } from "../lib/rilievo";
 
 // Vista 3D indicativa del tetto con i moduli (Three.js).
 //
@@ -11,6 +12,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 // l'altezza indicata dall'utente — non è un rilievo, quindi pareti e quote
 // sono indicative.
 //
+// Con `rilievo` (DSM reale) il terreno diventa una mesh con le quote e la foto stesa sopra;
+// con `area.piano` (da stimaPiano) i moduli poggiano sul piano della falda misurato.
+//
 // props:
 //  scena: {
 //    bounds: { xmin, xmax, ymin, ymax }   // estensione (m) coperta dalla foto
@@ -18,6 +22,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 //    altezzaM: quota del tetto/gronda
 //    aree: [{ tipo, poligono, ostacoli, pendenzaDeg, azimutDiscesa }]
 //    pannelli: [{ cx, cy, az, tilt, portrait, areaIdx }]
+//    rilievo?: { nx, ny, passoM, estensioneM, quote(Float32Array, m) }   // DSM reale
+//    aree[].piano?: piano stimato { a, b, z0, cx, cy }
 //  }
 // ref: { setVista(nome), cattura(nome, larghezza, altezza) -> dataURL JPEG }
 
@@ -81,7 +87,8 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className }, ref) {
       if (annullato || !containerRef.current || !scena) return;
 
       const container = containerRef.current;
-      const { bounds, aree, pannelli, altezzaM } = scena;
+      const { bounds, aree, pannelli, rilievo } = scena;
+      const altezzaBase = scena.altezzaM;
       const Wm = bounds.xmax - bounds.xmin;
       const Hm = bounds.ymax - bounds.ymin;
       const cx0 = (bounds.xmin + bounds.xmax) / 2;
@@ -127,6 +134,7 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className }, ref) {
       sc.left = -raggio * 1.6; sc.right = raggio * 1.6; sc.top = raggio * 1.6; sc.bottom = -raggio * 1.6;
       sc.near = 1; sc.far = raggio * 9;
       sole.shadow.bias = -0.0004;
+      sole.shadow.normalBias = 0.05;
       scene.add(sole, sole.target);
 
       // texture satellitare
@@ -141,24 +149,68 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className }, ref) {
       }
       const matTerreno = new THREE.MeshStandardMaterial({ map: texSat || null, color: texSat ? 0xffffff : 0xb9c3a8, roughness: 1, metalness: 0 });
 
-      // terreno
-      const terreno = new THREE.Mesh(new THREE.PlaneGeometry(Wm, Hm), matTerreno);
-      terreno.rotation.x = -Math.PI / 2;
-      terreno.position.set(cx0, 0, -cy0);
-      terreno.receiveShadow = true;
-      scene.add(terreno);
+      // terreno: piano con la foto (senza rilievo) oppure mesh del rilievo reale (DSM)
+      if (rilievo) {
+        const { nx, ny, passoM, estensioneM: E, quote } = rilievo;
+        const pos = new Float32Array(nx * ny * 3);
+        const uvs = new Float32Array(nx * ny * 2);
+        for (let j = 0; j < ny; j++) {
+          for (let i = 0; i < nx; i++) {
+            const k = j * nx + i;
+            const x = -E + i * passoM;
+            const y = E - j * passoM;
+            pos[k * 3] = x;
+            pos[k * 3 + 1] = quote[k];
+            pos[k * 3 + 2] = -y;
+            uvs[k * 2] = (x + E) / (2 * E);
+            uvs[k * 2 + 1] = (y + E) / (2 * E);
+          }
+        }
+        const idx = [];
+        for (let j = 0; j < ny - 1; j++) {
+          for (let i = 0; i < nx - 1; i++) {
+            const a0 = j * nx + i, b0 = a0 + 1, c0 = a0 + nx, d0 = c0 + 1;
+            idx.push(a0, c0, b0, b0, c0, d0);
+          }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+        const terrenoMesh = new THREE.Mesh(g, matTerreno);
+        terrenoMesh.castShadow = true;
+        terrenoMesh.receiveShadow = true;
+        scene.add(terrenoMesh);
+      } else {
+        const terreno = new THREE.Mesh(new THREE.PlaneGeometry(Wm, Hm), matTerreno);
+        terreno.rotation.x = -Math.PI / 2;
+        terreno.position.set(cx0, 0, -cy0);
+        terreno.receiveShadow = true;
+        scene.add(terreno);
+      }
 
       const uvDi = (x, y) => [(x - bounds.xmin) / Wm, (y - bounds.ymin) / Hm];
 
       // altezza della copertura in un punto (m)
       const quota = (area, x, y) => {
-        if (area.tipo !== "falda") return altezzaM;
+        if (rilievo) return area.piano ? quotaPiano(area.piano, x, y) : quotaIn(rilievo, x, y);
+        if (area.tipo !== "falda") return altezzaBase;
         const f = { x: Math.sin(area.azimutDiscesa * DEG), y: Math.cos(area.azimutDiscesa * DEG) };
         let sMax = -Infinity;
         for (const p of area.poligono) sMax = Math.max(sMax, p.x * f.x + p.y * f.y);
         const s = x * f.x + y * f.y;
-        return altezzaM + Math.tan(Math.max(0, Math.min(80, area.pendenzaDeg)) * DEG) * (sMax - s);
+        return altezzaBase + Math.tan(Math.max(0, Math.min(80, area.pendenzaDeg)) * DEG) * (sMax - s);
       };
+      // quota di riferimento per la camera
+      const altezzaM = rilievo
+        ? aree.length
+            ? aree.reduce((sum, a) => {
+                const c = a.poligono.reduce((q, p) => ({ x: q.x + p.x / a.poligono.length, y: q.y + p.y / a.poligono.length }), { x: 0, y: 0 });
+                return sum + quota(a, c.x, c.y);
+              }, 0) / aree.length
+            : 8
+        : altezzaBase;
 
       const matPareti = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.9, side: THREE.DoubleSide });
       const matOstacolo = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.8 });
@@ -206,7 +258,7 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className }, ref) {
       }
 
       const matTetto = new THREE.MeshStandardMaterial({ map: texSat || null, color: texSat ? 0xffffff : 0x9a8f86, roughness: 0.95, metalness: 0 });
-      aree.forEach((area) => {
+      if (!rilievo) aree.forEach((area) => {
         scene.add(prisma(area.poligono, () => 0, (x, y) => quota(area, x, y), matTetto, matPareti, uvDi));
         for (const o of area.ostacoli || []) {
           scene.add(
