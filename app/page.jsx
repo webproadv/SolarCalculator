@@ -1907,7 +1907,6 @@ function Dashboard({
           </button>
         )}
         <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa preventivo</button>
-        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("csv")}>📤 CSV Noleggio</button>
         <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
           {pdfNoleggioLoading && <span className="spinner" />}
           📄 PDF Noleggio
