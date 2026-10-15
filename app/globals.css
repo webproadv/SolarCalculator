@@ -490,3 +490,35 @@ th.num{ text-align:right; }
   .pr-contact .pr-contact-rows{ display:flex; flex-wrap:wrap; gap:6px 26px; font-size:11px; color:#4B564F; }
   .pr-contact .pr-contact-rows b{ font-family:"IBM Plex Mono", monospace; font-size:9px; text-transform:uppercase; letter-spacing:.03em; color:#B8791F; margin-right:5px; }
 }
+
+/* ---- Simulazione posa pannelli (RoofPlanner) ---- */
+.posa-summary{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:6px; }
+.posa-num{ font-family:"IBM Plex Mono"; font-size:26px; font-weight:700; color:var(--ink); line-height:1.1; }
+.posa-num span{ font-size:15px; font-weight:500; color:var(--ink-soft); }
+.posa-lab{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.posa-toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0 8px; }
+.posa-hint{ font-size:12.5px; color:var(--ink-soft); margin-right:6px; }
+.posa-mapwrap{ position:relative; border-radius:10px; overflow:hidden; border:1px solid var(--border-strong); }
+.posa-map{ width:100%; aspect-ratio:8/5; background:var(--surface-2); }
+.posa-legend{ position:absolute; left:8px; bottom:8px; display:flex; flex-wrap:wrap; gap:10px; background:rgba(15,23,42,.72); color:#fff; font-size:11.5px; padding:5px 10px; border-radius:6px; pointer-events:none; }
+.posa-legend i{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+.posa-chooser{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,.45); z-index:5; }
+.posa-chooser-box{ background:var(--surface); border-radius:12px; padding:20px 24px; max-width:420px; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+.posa-chooser-box h4{ margin:0 0 6px; font-size:16px; }
+.posa-chooser-box p{ margin:0 0 14px; font-size:13px; color:var(--ink-soft); }
+.posa-chooser-btns{ display:flex; gap:10px; justify-content:center; margin-bottom:10px; }
+.posa-areas{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.posa-area-chip{ border:1px solid var(--border-strong); background:var(--surface); border-radius:999px; padding:6px 12px; font-size:12.5px; cursor:pointer; color:var(--ink); }
+.posa-area-chip.active{ border-color:var(--c-f1); background:var(--accent-soft); }
+.posa-edit{ margin-top:12px; padding:14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+.posa-edit-head{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
+.posa-edit-head input[type="text"]{ max-width:200px; }
+.posa-edit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.posa-seg{ display:inline-flex; border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; }
+.posa-seg button{ border:none; background:var(--surface); padding:7px 12px; font-size:13px; cursor:pointer; color:var(--ink-soft); }
+.posa-seg button.on{ background:var(--c-f1); color:#fff; }
+.posa-check{ display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px; }
+.posa-3d-head{ display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-top:16px; }
+.posa-views{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
+.posa-actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
+@media (max-width:720px){ .posa-summary{ grid-template-columns:1fr; } .posa-edit-grid{ grid-template-columns:1fr; } }

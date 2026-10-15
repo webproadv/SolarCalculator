@@ -65,6 +65,7 @@ export async function PUT(req, { params }) {
     costoImpiantoProposto,
     numeroRateNoleggio,
     roofImages,
+    posa,
     nomeProgetto,
   } = body || {};
   if (!company || !quote) {
@@ -84,7 +85,7 @@ export async function PUT(req, { params }) {
     impianto_proposto_kwp: Number(impiantoProposto) || null,
     accumulo_proposto_kwh: Number(accumuloProposto) || null,
     costo_impianto_proposto: Number(costoImpiantoProposto) || null,
-    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, referente, cellulare, email, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages },
+    dati: { company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore, referente, cellulare, email, impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages, posa },
   };
 
   const { data, error } = await supabaseAdmin().from("progetti").update(row).eq("id", id).select("id").maybeSingle();

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import SatellitePreviewMap from "./SatellitePreviewMap";
 import OrientamentoDial from "./OrientamentoDial";
+import RoofPlanner from "./RoofPlanner";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -572,6 +573,7 @@ export default function Page() {
         accumuloProposto: saved.accumuloProposto,
         costoImpiantoProposto: saved.costoImpiantoProposto,
         numeroRateNoleggio: saved.numeroRateNoleggio,
+        posa: saved.posa,
       });
       setStep(2);
     } catch (err) {
@@ -1541,6 +1543,7 @@ export default function Page() {
           initialAccumuloProposto={progettoCaricato?.accumuloProposto}
           initialCostoImpiantoProposto={progettoCaricato?.costoImpiantoProposto}
           initialNumeroRateNoleggio={progettoCaricato?.numeroRateNoleggio}
+          initialPosa={progettoCaricato?.posa}
         />
       )}
     </>
@@ -1568,6 +1571,7 @@ function Dashboard({
   initialAccumuloProposto,
   initialCostoImpiantoProposto,
   initialNumeroRateNoleggio,
+  initialPosa,
 }) {
   const seg = quote.roof.segments;
   const segColors = ["var(--c-f1)", "var(--c-f2)", "var(--c-f3)"];
@@ -1745,6 +1749,8 @@ function Dashboard({
   // senza accumulare una riga per ogni piccola modifica. Chi vuole comunque
   // tenere uno storico esplicito delle revisioni può usare "Salva come nuova
   // revisione", che crea sempre una nuova riga indipendente.
+  // Simulazione posa pannelli (aree disegnate sul tetto + immagini per il PDF)
+  const [posa, setPosa] = useState(initialPosa || null);
   const [savedProjectId, setSavedProjectId] = useState(progettoId || null);
   const [saveState, setSaveState] = useState({ status: "idle", message: "" });
 
@@ -1752,7 +1758,7 @@ function Dashboard({
     return {
       company, quote, monthly, bollettaMode, ocrMonthlyKwh, potenzaDisponibile, fornitore,
       referente, cellulare, email,
-      impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages,
+      impiantoProposto, accumuloProposto, costoImpiantoProposto, numeroRateNoleggio, roofImages, posa,
     };
   }
 
@@ -1866,6 +1872,13 @@ function Dashboard({
     ? Math.round((produzioneAnnuaTotaleKwh / quote.input.consumoAnnuoKwh) * 1000) / 10
     : 0;
   const pannelliStimati = Math.round((kwp * 1000) / DEFAULTS.panelWp);
+  const centroPosa = useMemo(
+    () => ({
+      lat: Number(quote.input.pvgisLat ?? quote.input.lat),
+      lng: Number(quote.input.pvgisLng ?? quote.input.lng),
+    }),
+    [quote.input.pvgisLat, quote.input.pvgisLng, quote.input.lat, quote.input.lng]
+  );
   const areaUtileStimataM2 = Math.round(kwp * DEFAULTS.mqPerKwp);
 
   return (
@@ -2141,6 +2154,27 @@ function Dashboard({
             <div className="econ-fill" style={{ width: `${Math.min(100, coperturaFabbisognoPct)}%`, background: "var(--c-f1)" }} />
           </div>
         </div>
+
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Simulazione posa pannelli sul tetto</h3>
+          <div className="card-note">
+            Disegna sulla mappa le aree del tetto adatte all&apos;installazione: l&apos;app dispone i moduli Trina Vertex S+ da 505 Wp (1961 × 1134 mm), li conta e genera una vista 3D da inserire nel PDF. Simulazione indicativa, da verificare in sopralluogo.
+          </div>
+          {Number.isFinite(centroPosa.lat) && Number.isFinite(centroPosa.lng) ? (
+            <RoofPlanner
+              centro={centroPosa}
+              pannelliRichiesti={pannelliStimati}
+              kwpRichiesti={kwp}
+              inclinazioneForm={quote.input.inclinazioneGradi}
+              orientamentoForm={quote.input.orientamentoGradi}
+              posa={posa}
+              onPosaChange={setPosa}
+              onAdeguaKwp={(k) => setImpiantoProposto(String(k))}
+            />
+          ) : (
+            <p className="hint">Coordinate del sito non disponibili.</p>
+          )}
+        </div>
       </section>
 
       <section className="block" id="c">
@@ -2391,6 +2425,7 @@ function Dashboard({
         numeroRateNoleggio={numeroRateNoleggio}
         flusso={flusso}
         bollettaMensile={bollettaMensile}
+        posa={posa}
       />
     </div>
   );
@@ -2424,7 +2459,10 @@ function PrintReport({
   numeroRateNoleggio,
   flusso,
   bollettaMensile,
+  posa,
 }) {
+  const posaPdf = posa?.immagini?.pianta ? posa.immagini : null;
+  const extra = posaPdf ? 1 : 0;
   const oggi = new Date().toLocaleDateString("it-IT");
   const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
     ? Math.min(100, Math.round((areaUtileStimataM2 / quote.roof.maxArrayAreaMeters2) * 100))
@@ -2567,6 +2605,60 @@ function PrintReport({
         <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 3</span></div>
       </div>
 
+      {/* Pagina — Simulazione posa pannelli (solo se le immagini sono state salvate) */}
+      {posaPdf && (
+        <div className="pr-page">
+          <div className="pr-running-header">
+            <span>{company.ragioneSociale}</span>
+            <span>Sezione B — Simulazione posa dei moduli</span>
+          </div>
+          <h2 className="pr-h2"><span className="pr-section-tag">B</span>Simulazione di posa dei moduli sul tetto</h2>
+          <img src={posaPdf.pianta} alt="Disposizione dei moduli sul tetto (vista dall'alto)" className="pr-photo" />
+          <p className="pr-note" style={{ margin: "4px 0 10px" }}>
+            Vista dall&apos;alto: aree utili in giallo, moduli posizionati in blu scuro, eventuali ostacoli in rosso.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <img src={posaPdf.v3d1} alt="Vista 3D da Sud-Est" className="pr-photo" />
+            <img src={posaPdf.v3d2} alt="Vista 3D da Sud-Ovest" className="pr-photo" />
+          </div>
+          <table className="pr-table" style={{ marginTop: 10 }}>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Tetto</th>
+                <th className="num">Superficie (m²)</th>
+                <th className="num">Moduli</th>
+                <th className="num">kWp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(posaPdf.riepilogo?.aree || []).map((a, i) => (
+                <tr key={i}>
+                  <td>{a.nome}</td>
+                  <td>
+                    {a.tipo === "piano"
+                      ? `Piano · ${a.disposizione === "estovest" ? "Est-Ovest" : "file a " + a.tilt + "°"}`
+                      : `Falda · pendenza ${a.tilt}°`}
+                  </td>
+                  <td className="num">{a.areaM2}</td>
+                  <td className="num">{a.moduli}</td>
+                  <td className="num">{fmtNumIt((a.moduli * 505) / 1000, 2)}</td>
+                </tr>
+              ))}
+              <tr className="total">
+                <td colSpan={3}>Totale (richiesti: {posaPdf.riepilogo?.richiesti})</td>
+                <td className="num">{posaPdf.riepilogo?.posizionati}</td>
+                <td className="num">{fmtNumIt(posaPdf.riepilogo?.kwp ?? 0, 2)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="pr-note">
+            Moduli {posaPdf.riepilogo?.modulo} (505 Wp, 1961 × 1134 mm). Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto satellitare, con distanze dai bordi e interfila per evitare ombreggiamenti reciproci; quote e pareti degli edifici nella vista 3D sono stimate. Ingombri, ombreggiamenti, portata della copertura e vincoli vanno verificati in sopralluogo.
+          </p>
+          <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4</span></div>
+        </div>
+      )}
+
       {/* Pagina 4 — Sezione C: andamento mensile */}
       <div className="pr-page">
         <div className="pr-running-header">
@@ -2626,7 +2718,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {4 + extra}</span></div>
       </div>
 
       {/* Pagina 5 — Sezione D: Noleggio operativo */}
@@ -2689,7 +2781,7 @@ function PrintReport({
           Il &quot;Delta cash flow&quot; indica il guadagno (verde) o la perdita (rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 5</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {5 + extra}</span></div>
       </div>
 
       {/* Pagina 6 — Sezione E: dati di partenza + nota metodologica */}
@@ -2736,7 +2828,7 @@ function PrintReport({
           </div>
         </div>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 6</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {6 + extra}</span></div>
       </div>
     </div>
   );

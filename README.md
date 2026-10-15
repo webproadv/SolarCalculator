@@ -153,3 +153,13 @@ Accanto a "📄 PDF Noleggio", il bottone **"📄 PDF Acquisto"** riempie il tem
 ### Bolletta residua (mensile)
 
 Nella Sezione C (dashboard e PDF) ogni mese riporta il **prelievo da rete** (consumo diurno + notturno − autoconsumo) e la **bolletta residua** = prelievo × costo medio dell'energia (`economics().prezzoMedio`, IVA esclusa), arrotondata all'euro (`bollettaResiduaMensile` in `lib/calc.js`). La somma dei 12 mesi è il valore "Bolletta residua" usato nel flusso di cassa del noleggio (`flussoCassaNoleggio(..., bollettaResiduaAnnua)`), in dashboard e nel PDF.
+
+### Simulazione posa pannelli (Sezione B)
+
+Dopo il dimensionamento, la card "Simulazione posa pannelli sul tetto" permette di disegnare sulla mappa satellitare (Mapbox) le aree del tetto adatte all'installazione. Alla chiusura di ogni area l'app chiede se il tetto è **piano** o **a falda**:
+
+- **piano**: moduli inclinati (default 15°) su file rivolte all'orientamento indicato, con interfila calcolata per non farsi ombra a mezzogiorno del solstizio d'inverno (`interfilaM`), oppure configurazione **Est-Ovest** a coppie (default 10°); margine dai bordi 1 m;
+- **falda**: moduli a filo sulla falda (pendenza e verso della falda modificabili), margine 0,4 m.
+
+Il motore è `lib/roofLayout.js` (geometria in metri su piano locale, griglia allineata ai lati dell'edificio, test di contenimento esatto, ostacoli, scelta automatica verticale/orizzontale). Modulo di riferimento: Trina Vertex S+ TSM-NEG18R.28, 505 Wp, 1961 × 1134 × 30 mm. L'app confronta i moduli che entrano con quelli richiesti dalla taglia e, se mancano, propone di adeguare i kWp. La vista 3D (`app/RoofScene3D.jsx`, Three.js) stende la foto satellitare sul tetto, usa un'altezza edificio indicativa e produce due scatti (Sud-Est, Sud-Ovest) che, insieme alla pianta con i moduli, finiscono nel PDF e nel progetto salvato (campo `posa`). È una simulazione indicativa, non un progetto esecutivo. Richiede `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`.
+
