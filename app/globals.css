@@ -81,6 +81,8 @@ button{ font-family:inherit; }
 .brandmark .dot{ width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg, var(--c-f1), var(--c-f2)); flex:none; }
 .brandmark b{ font-family:"IBM Plex Sans Condensed"; font-weight:700; font-size:14.5px; letter-spacing:.01em; }
 .brandmark small{ color:var(--ink-faint); font-size:12px; }
+a.brandmark-link{ text-decoration:none; color:inherit; cursor:pointer; }
+a.brandmark-link:hover b{ text-decoration:underline; }
 .topnav-actions{ display:flex; align-items:center; gap:12px; }
 .topnav-actions .btn{ padding:8px 14px; font-size:13.5px; }
 

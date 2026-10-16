@@ -983,14 +983,14 @@ export default function Page() {
     <>
       <div className="topnav screen-only">
         <div className="topnav-inner">
-          <div className="brandmark">
+          <a className="brandmark brandmark-link" href="/" title="Torna alla home">
             <span className="dot" aria-hidden="true"></span>
             <div>
               <b>Preventivo FV</b>
               <br />
               <small>SolarCalculator — MVP</small>
             </div>
-          </div>
+          </a>
           <div className="topnav-actions">
             <Link href="/progetti" className="btn btn-ghost">
               📂 I miei progetti
