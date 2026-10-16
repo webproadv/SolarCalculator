@@ -167,3 +167,19 @@ Il motore è `lib/roofLayout.js` (geometria in metri su piano locale, griglia al
 
 **Ripartizione tra più aree.** Con due o più aree si sceglie come distribuire i moduli richiesti (`distribuisciPannelli` in `lib/roofLayout.js`): **In ordine** (la prima area si riempie, la seconda prende il resto; l'ordine si cambia con ▲▼) oppure **Uniforme** (stessa quantità su ogni area — es. metà e metà —; se un'area è satura, il resto va alle altre). La scelta è salvata in `posa.ripartizione` e riportata nel PDF.
 
+
+### Collegamento con l'app Bandi Fotovoltaico
+
+In dashboard, accanto a "Stampa preventivo", il pulsante **🏛️ Bandi per questo cliente** apre in una nuova scheda `https://bandi-fotovoltaico.vercel.app/?piva=<11 cifre>` (indirizzo modificabile con la variabile `NEXT_PUBLIC_BANDI_URL`). Il pulsante compare solo se la partita IVA del cliente ha 11 cifre.
+
+Perché la ricerca parta da sola, **l'app dei bandi deve leggere il parametro `piva`** all'apertura. Esempio per una pagina client di Next.js (adatta i nomi `setPiva` e `cercaBandi` a quelli reali dell'app):
+
+```js
+useEffect(() => {
+  const piva = new URLSearchParams(window.location.search).get("piva");
+  if (/^\d{11}$/.test(piva || "")) {
+    setPiva(piva);   // precompila il campo
+    cercaBandi(piva); // lancia subito la ricerca dei bandi in target
+  }
+}, []);
+```

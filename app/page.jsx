@@ -75,6 +75,17 @@ function fmtEuroSignedIt(value) {
   return n < 0 ? `-${fmtEuroIt(Math.abs(n))}` : fmtEuroIt(n);
 }
 
+// App "Bandi Fotovoltaico": si apre in una nuova scheda con la partita IVA del
+// cliente nel parametro ?piva=, così la ricerca dei bandi in target parte subito.
+// L'indirizzo si può cambiare con NEXT_PUBLIC_BANDI_URL.
+const BANDI_URL = process.env.NEXT_PUBLIC_BANDI_URL || "https://bandi-fotovoltaico.vercel.app/";
+function linkBandi(piva) {
+  const cifre = String(piva || "").replace(/\D/g, "").slice(0, 11);
+  const u = new URL(BANDI_URL);
+  u.searchParams.set("piva", cifre);
+  return u.toString();
+}
+
 // Racchiude tra virgolette (raddoppiando quelle interne) un valore CSV solo
 // se contiene la virgola, un a-capo o una virgoletta — esattamente come fa
 // il template originale per i numeri in formato italiano.
@@ -1928,6 +1939,17 @@ function Dashboard({
           </button>
         )}
         <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa preventivo</button>
+        {String(company.piva || "").replace(/\D/g, "").length === 11 && (
+          <a
+            className="btn btn-ghost"
+            href={linkBandi(company.piva)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Apre l'app Bandi Fotovoltaico con la partita IVA del cliente già inserita"
+          >
+            🏛️ Bandi per questo cliente
+          </a>
+        )}
         <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
           {pdfNoleggioLoading && <span className="spinner" />}
           📄 PDF Noleggio
