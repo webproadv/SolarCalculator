@@ -1941,13 +1941,14 @@ function Dashboard({
         <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa preventivo</button>
         {String(company.piva || "").replace(/\D/g, "").length === 11 && (
           <a
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-sm"
+            style={{ textDecoration: "none" }}
             href={linkBandi(company.piva)}
             target="_blank"
             rel="noopener noreferrer"
             title="Apre l'app Bandi Fotovoltaico con la partita IVA del cliente già inserita"
           >
-            🏛️ Bandi per questo cliente
+            🏛️ Bandi
           </a>
         )}
         <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>

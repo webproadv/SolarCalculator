@@ -533,3 +533,6 @@ th.num{ text-align:right; }
 .posa-radio input { margin-top: 3px; }
 .posa-order { display: inline-flex; gap: 2px; }
 .posa-rilevato { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: rgba(5, 150, 105, 0.09); }
+
+/* i link con aspetto da pulsante non vanno sottolineati */
+a.btn, a.btn:hover { text-decoration: none; }
