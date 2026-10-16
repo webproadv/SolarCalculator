@@ -4,7 +4,9 @@ import { NextResponse } from "next/server";
 // Pagine raggiungibili senza essere autenticati: login, registrazione e la
 // schermata di "accesso non autorizzato" (altrimenti un utente respinto
 // da lì finirebbe in un loop di redirect).
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/non-autorizzato"]);
+// /api/cron/* è chiamata da Vercel Cron (nessun utente loggato): ogni rotta lì
+// dentro verifica da sola l'header Authorization con CRON_SECRET.
+const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/non-autorizzato", "/api/cron(.*)"]);
 
 // Verifica la whitelist email direttamente via REST (fetch), invece di
 // importare il client @supabase/supabase-js: il middleware gira su Edge

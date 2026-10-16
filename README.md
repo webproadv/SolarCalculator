@@ -183,3 +183,7 @@ useEffect(() => {
   }
 }, []);
 ```
+
+### Keep-alive di Supabase (piano Free)
+
+Per evitare la pausa del progetto Supabase dopo 7 giorni di inattività, `vercel.json` definisce un cron (ogni 3 giorni alle 06:00 UTC) che chiama `GET /api/cron/supabase-keepalive`, la quale esegue una query di conteggio su `progetti` e `authorized_emails`. La rotta è protetta da `CRON_SECRET`: va creata la variabile d'ambiente `CRON_SECRET` (stringa casuale lunga) su Vercel, poi redeploy. Dettagli e procedura riutilizzabile in `docs/PROCEDURA-KEEPALIVE-SUPABASE.md`.
