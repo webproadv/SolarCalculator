@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BrandSun from "../BrandSun";
 import { UserButton } from "@clerk/nextjs";
 
 export default function ProgettiPage() {
@@ -70,16 +71,15 @@ export default function ProgettiPage() {
       <div className="topnav">
         <div className="topnav-inner">
           <Link className="brandmark brandmark-link" href="/" title="Torna alla home">
-            <span className="dot" aria-hidden="true"></span>
+            <BrandSun />
             <div>
               <b>Preventivo FV</b>
-              <br />
-              <small>SolarCalculator — MVP</small>
+              <small>Lenergy · SolarCalculator</small>
             </div>
           </Link>
           <div className="topnav-actions">
-            <Link href="/" className="btn btn-ghost">
-              ← Nuovo preventivo
+            <Link href="/" className="btn btn-ghost" title="Nuovo preventivo">
+              <span aria-hidden="true">＋</span> <span className="hide-sm">Nuovo preventivo</span>
             </Link>
             <UserButton afterSignOutUrl="/sign-in" />
           </div>

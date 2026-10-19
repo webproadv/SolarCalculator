@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
+import BrandSun from "./BrandSun";
 import { UserButton } from "@clerk/nextjs";
 import SatellitePreviewMap from "./SatellitePreviewMap";
 import OrientamentoDial from "./OrientamentoDial";
@@ -984,16 +985,15 @@ export default function Page() {
       <div className="topnav screen-only">
         <div className="topnav-inner">
           <a className="brandmark brandmark-link" href="/" title="Torna alla home">
-            <span className="dot" aria-hidden="true"></span>
+            <BrandSun />
             <div>
               <b>Preventivo FV</b>
-              <br />
-              <small>SolarCalculator — MVP</small>
+              <small>Lenergy · SolarCalculator</small>
             </div>
           </a>
           <div className="topnav-actions">
-            <Link href="/progetti" className="btn btn-ghost">
-              📂 I miei progetti
+            <Link href="/progetti" className="btn btn-ghost" title="I miei progetti">
+              <span aria-hidden="true">📂</span> <span className="hide-sm">I miei progetti</span>
             </Link>
             <UserButton afterSignOutUrl="/sign-in" />
           </div>
@@ -1011,11 +1011,14 @@ export default function Page() {
         </div>
       ) : step < 2 ? (
         <div className="wizard">
-          <div className="steps">
-            {STEPS.slice(0, 2).map((s, i) => (
-              <div key={s} className={`step-dot ${i === step ? "active" : i < step ? "done" : ""}`} title={s} />
+          <ol className="stepper" aria-label="Avanzamento">
+            {STEPS.map((s, i) => (
+              <li key={s} className={`stepper-item ${i === step ? "active" : i < step ? "done" : ""}`} aria-current={i === step ? "step" : undefined}>
+                <span className="stepper-num">{i < step ? "✓" : i + 1}</span>
+                <span className="stepper-label">{s}</span>
+              </li>
             ))}
-          </div>
+          </ol>
 
           {step === 0 && (
             <div className="card">
@@ -1995,6 +1998,14 @@ function Dashboard({
         </div>
       )}
 
+      <nav className="section-nav screen-only" aria-label="Sezioni del preventivo">
+        <a href="#a"><b>A</b> Producibilità</a>
+        <a href="#b"><b>B</b> Dimensionamento</a>
+        <a href="#c"><b>C</b> Andamento mensile</a>
+        <a href="#d"><b>D</b> Noleggio</a>
+        <a href="#e"><b>E</b> Dati di partenza</a>
+      </nav>
+
       <div className="header">
         <div className="company-card">
           <div className="company-main">
@@ -2510,47 +2521,128 @@ function PrintReport({
   const coperturaSuperficiePct = quote.roof.maxArrayAreaMeters2
     ? Math.min(100, Math.round((areaUtileStimataM2 / quote.roof.maxArrayAreaMeters2) * 100))
     : null;
+  const numeroDocumento = `FV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(company.piva || "").slice(-4)}`;
+  const coperturaFabbisognoPct = quote.input.consumoAnnuoKwh
+    ? Math.min(100, Math.round((produzioneAnnuaTotaleKwh / quote.input.consumoAnnuoKwh) * 100))
+    : 0;
+  const compBase = [
+    { label: "Risparmio in bolletta", valore: econ.risparmioBolletta, color: "#0E7C5A" },
+    { label: "Ritiro GSE", valore: econ.ricavoGSE, color: "#F5A524" },
+    { label: "Ricavo CER", valore: econ.ricavoCER, color: "#14B8A6" },
+  ];
+  const compTot = compBase.reduce((t, c) => t + Math.max(0, c.valore), 0) || 1;
+  const composizioneBeneficio = compBase.map((c) => ({ ...c, pct: (Math.max(0, c.valore) / compTot) * 100 }));
 
   return (
     <div className="print-report">
-      {/* Pagina 1 — copertina e sintesi */}
+      {/* Pagina 1 — copertina e sintesi (impaginata come una bolletta energetica) */}
       <div className="pr-page">
-        <div className="pr-running-header">
-          <span>Analisi energetica — {company.ragioneSociale}</span>
-          <span>{oggi}</span>
+        <div className="pb-top">
+          <div className="pb-brand">
+            <svg viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">
+              <circle cx="16" cy="16" r="6.2" fill="#FBBF24" />
+              {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+                <rect key={a} x="15" y="2.6" width="2" height="4.6" rx="1" fill="#FBBF24" transform={`rotate(${a} 16 16)`} />
+              ))}
+            </svg>
+            <div>
+              <div className="pb-name">Lenergy Spa</div>
+              <div className="pb-tag">Energia fotovoltaica per le imprese</div>
+            </div>
+          </div>
+          <dl className="pb-doc">
+            <div><dt>Documento</dt><dd>Proposta impianto FV</dd></div>
+            <div><dt>Rif.</dt><dd>{numeroDocumento}</dd></div>
+            <div><dt>Data emissione</dt><dd>{oggi}</dd></div>
+          </dl>
         </div>
 
-        <div className="pr-eyebrow">Analisi energetica e proposta impianto fotovoltaico</div>
-        <h1 className="pr-h1">{company.ragioneSociale}</h1>
-        <p className="pr-lead">
-          {company.indirizzo}, {company.cap} {company.comune} ({company.provincia}) — P.IVA {company.piva}
-        </p>
-
-        <dl className="pr-cover-meta">
-          <div><dt>Coordinate sito</dt><dd>{company.lat.toFixed(4)}, {company.lng.toFixed(4)}</dd></div>
-          <div><dt>Preparato da</dt><dd>Lenergy Spa</dd></div>
-          <div><dt>Spesa energetica annua (IVA inclusa)</dt><dd>€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd></div>
-          <div><dt>Consumo annuo dichiarato</dt><dd>{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</dd></div>
-        </dl>
-
-        <h2 className="pr-h2" style={{ marginBottom: 12 }}>Sintesi della proposta</h2>
-        <div className="pr-kpi-grid">
-          <div className="pr-kpi"><span className="v">{kwp} kWp</span><span className="l">Potenza impianto proposta</span></div>
-          <div className="pr-kpi"><span className="v">{(produzioneAnnuaTotaleKwh / 1000).toFixed(1)} MWh</span><span className="l">Produzione annua stimata</span></div>
-          <div className="pr-kpi"><span className="v">{autoconsumoPct}%</span><span className="l">Autoconsumo stimato</span></div>
-          <div className="pr-kpi"><span className="v">€ {econ.beneficioTotale.toLocaleString("it-IT")}</span><span className="l">Beneficio economico annuo (IVA escl.)</span></div>
-          <div className="pr-kpi"><span className="v">{payback ?? "—"} anni</span><span className="l">Tempo di rientro stimato</span></div>
+        <div className="pb-title">
+          <h1 className="pr-h1">{company.ragioneSociale}</h1>
+          <span className="pb-sub">Analisi energetica</span>
         </div>
 
-        <p className="pr-note">
-          Il presente documento riassume l&apos;analisi dei consumi energetici, il dimensionamento dell&apos;impianto
-          fotovoltaico proposto e le relative stime economiche, elaborate da Lenergy Spa sulla base dei dati forniti
-          dal cliente e dei rilievi disponibili tramite Google Solar API. I contenuti sono organizzati nelle sezioni
-          seguenti: A) Producibilità fotovoltaica, B) Dimensionamento dell&apos;impianto, C) Andamento mensile di
-          consumi e produzione, D) Soluzione economica — Noleggio operativo, E) Dati di partenza.
+        <div className="pb-boxes">
+          <section className="pb-box">
+            <h4>Dati cliente</h4>
+            <dl>
+              <dt>Ragione sociale</dt><dd>{company.ragioneSociale}</dd>
+              <dt>Partita IVA</dt><dd>{company.piva}</dd>
+              <dt>Sede / sito</dt><dd>{company.indirizzo}, {company.cap} {company.comune} ({company.provincia})</dd>
+              <dt>Coordinate</dt><dd>{company.lat.toFixed(4)}, {company.lng.toFixed(4)}</dd>
+            </dl>
+          </section>
+          <section className="pb-box">
+            <h4>Dati di consumo (fornitura attuale)</h4>
+            <dl>
+              <dt>Consumo annuo</dt><dd>{quote.input.consumoAnnuoKwh.toLocaleString("it-IT")} kWh</dd>
+              <dt>Spesa annua (IVA incl.)</dt><dd>€ {quote.input.spesaAnnua.toLocaleString("it-IT")}</dd>
+              <dt>Prezzo medio energia</dt><dd>€ {econ.prezzoMedio.toFixed(3)}/kWh</dd>
+              <dt>Fasce F1 / F2 / F3</dt><dd>{quote.input.f1Pct}% · {quote.input.f2Pct}% · {quote.input.f3Pct}%</dd>
+            </dl>
+          </section>
+        </div>
+
+        <div className="pb-total">
+          <div className="pb-total-main">
+            <span className="l">Beneficio economico annuo stimato</span>
+            <span className="v">€ {econ.beneficioTotale.toLocaleString("it-IT")}<small>/anno, IVA escl.</small></span>
+            <span className="s">Risparmio in bolletta + ritiro GSE + CER</span>
+          </div>
+          <div className="pb-total-side">
+            <div><span>Investimento impianto</span><b>€ {costoImpianto.toLocaleString("it-IT")}</b></div>
+            <div><span>Tempo di rientro</span><b>{payback ?? "—"} anni</b></div>
+            <div><span>Bolletta residua stimata</span><b>€ {bollettaMensile.totale.toLocaleString("it-IT")}</b></div>
+          </div>
+        </div>
+
+        <div className="pb-kpis">
+          <div className="pb-kpi"><span className="v">{kwp} kWp</span><span className="l">Potenza impianto proposta</span></div>
+          <div className="pb-kpi"><span className="v">{(produzioneAnnuaTotaleKwh / 1000).toFixed(1)} MWh</span><span className="l">Produzione annua stimata</span></div>
+          <div className="pb-kpi"><span className="v">{autoconsumoPct}%</span><span className="l">Autoconsumo stimato</span></div>
+          <div className="pb-kpi"><span className="v">{co2} t</span><span className="l">CO₂ evitata ogni anno</span></div>
+        </div>
+
+        <div className="pb-panel">
+          <h4>Come si compone il beneficio annuo <span>Valori in € / anno, IVA esclusa</span></h4>
+          <div className="pb-stack">
+            {composizioneBeneficio.map((c) => (
+              <i key={c.label} style={{ width: `${c.pct}%`, background: c.color }} />
+            ))}
+          </div>
+          <div className="pb-stack-legend">
+            {composizioneBeneficio.map((c) => (
+              <span key={c.label}><i style={{ background: c.color }} />{c.label} <b>€ {c.valore.toLocaleString("it-IT")}</b></span>
+            ))}
+          </div>
+        </div>
+
+        <div className="pb-panel">
+          <h4>Andamento mensile: consumi e produzione <span>kWh</span></h4>
+          <div className="pr-legend" style={{ marginBottom: 2 }}>
+            <span><span className="pr-legend-dot" style={{ background: "#F5A524" }} />Consumo diurno</span>
+            <span><span className="pr-legend-dot" style={{ background: "#0B3D2E" }} />Consumo notturno</span>
+            <span><span className="pr-legend-dot" style={{ background: "#14B8A6" }} />Produzione impianto</span>
+          </div>
+          <PrintComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} compact />
+        </div>
+
+        <div className="pb-panel">
+          <h4>Indicatori chiave</h4>
+          <div className="pb-gauges">
+            <PrintGauge pct={autoconsumoPct} color="#0E7C5A" titolo={`${autoconsumoPct}%`} testo="dell'energia prodotta è consumata in sito" />
+            <PrintGauge pct={coperturaFabbisognoPct} color="#F5A524" titolo={`${coperturaFabbisognoPct}%`} testo="del fabbisogno annuo coperto dall'impianto" />
+            <PrintGauge pct={coperturaSuperficiePct ?? 0} color="#14B8A6" titolo={coperturaSuperficiePct != null ? `${coperturaSuperficiePct}%` : "n/d"} testo="della superficie utile del tetto occupata" />
+          </div>
+        </div>
+
+        <p className="pb-foot-note">
+          Documento indicativo elaborato da Lenergy Spa sulla base dei consumi dichiarati dal cliente, dei dati di irraggiamento
+          PVGIS (Commissione Europea, JRC) e dei rilievi Google Solar API. Sezioni: A) Producibilità, B) Dimensionamento,
+          C) Andamento mensile, D) Soluzione economica — Noleggio operativo, E) Dati di partenza.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 1</span></div>
+        <div className="pr-footer"><span>Lenergy Spa — www.lenergy.it</span><span>Pagina 1 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 2 — Sezione A: Producibilità fotovoltaica */}
@@ -2591,7 +2683,7 @@ function PrintReport({
         <h3 className="pr-h3">Produzione mensile stimata</h3>
         <PrintBarChart data={monthlyProduction} />
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 2</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 2 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 3 — Sezione B: Dimensionamento impianto */}
@@ -2617,8 +2709,8 @@ function PrintReport({
 
         <div style={{ marginTop: 6 }}>
           <div className="pr-legend">
-            <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
-            <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
+            <span><span className="pr-legend-dot" style={{ background: "#F5A524" }} />Consumo diurno</span>
+            <span><span className="pr-legend-dot" style={{ background: "#0B3D2E" }} />Consumo notturno</span>
           </div>
           <PrintConsumptionChart diurno={monthlyDiurno} notturno={monthlyNotturno} />
         </div>
@@ -2645,7 +2737,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 3</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 3 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina — Simulazione posa pannelli (solo se le immagini sono state salvate) */}
@@ -2705,7 +2797,7 @@ function PrintReport({
               : " Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto satellitare; quote e pareti degli edifici nella vista 3D sono stimate."}
             {" "}Distanze dai bordi e interfila sono impostate per evitare ombreggiamenti reciproci. Ingombri, ombreggiamenti, portata della copertura e vincoli vanno verificati in sopralluogo.
           </p>
-          <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4</span></div>
+          <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4 di {6 + extra}</span></div>
         </div>
       )}
 
@@ -2718,9 +2810,9 @@ function PrintReport({
         <h2 className="pr-h2"><span className="pr-section-tag">C</span>Andamento mensile di consumi e produzione</h2>
 
         <div className="pr-legend">
-          <span><span className="pr-legend-dot" style={{ background: "#D9932A" }} />Consumo diurno</span>
-          <span><span className="pr-legend-dot" style={{ background: "#4A5FD6" }} />Consumo notturno</span>
-          <span><span className="pr-legend-dot" style={{ background: "#B8541F" }} />Produzione impianto</span>
+          <span><span className="pr-legend-dot" style={{ background: "#F5A524" }} />Consumo diurno</span>
+          <span><span className="pr-legend-dot" style={{ background: "#0B3D2E" }} />Consumo notturno</span>
+          <span><span className="pr-legend-dot" style={{ background: "#14B8A6" }} />Produzione impianto</span>
         </div>
         <PrintComboChart diurno={monthlyDiurno} notturno={monthlyNotturno} produzione={monthlyProduction} />
 
@@ -2768,7 +2860,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {4 + extra}</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {4 + extra} di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 5 — Sezione D: Noleggio operativo */}
@@ -2831,7 +2923,7 @@ function PrintReport({
           Il &quot;Delta cash flow&quot; indica il guadagno (verde) o la perdita (rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {5 + extra}</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {5 + extra} di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 6 — Sezione E: dati di partenza + nota metodologica */}
@@ -2878,8 +2970,27 @@ function PrintReport({
           </div>
         </div>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {6 + extra}</span></div>
+        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {6 + extra} di {6 + extra}</span></div>
       </div>
+    </div>
+  );
+}
+
+// Indicatore circolare (stile "gauge") per il riepilogo in copertina del PDF.
+function PrintGauge({ pct, color, titolo, testo }) {
+  const r = 17;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(100, pct || 0));
+  return (
+    <div className="pb-gauge">
+      <svg viewBox="0 0 44 44" width="46" height="46" aria-hidden="true">
+        <circle cx="22" cy="22" r={r} fill="none" stroke="#E8F0EB" strokeWidth="6" />
+        <circle
+          cx="22" cy="22" r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+          strokeDasharray={`${(v / 100) * c} ${c}`} transform="rotate(-90 22 22)"
+        />
+      </svg>
+      <div className="l"><b>{titolo}</b>{testo}</div>
     </div>
   );
 }
@@ -2887,7 +2998,7 @@ function PrintReport({
 // Grafico a barre mensile per il documento di stampa: SVG con viewBox fisso
 // (width:100% via CSS, nessun overflow-x) — si riscala sempre alla larghezza
 // disponibile sulla pagina, a differenza del grafico a schermo (div/flex).
-function PrintBarChart({ data, color = "#B8791F" }) {
+function PrintBarChart({ data, color = "#0E7C5A" }) {
   const width = 760;
   const height = 130;
   const max = Math.max(...data, 1);
@@ -2903,7 +3014,7 @@ function PrintBarChart({ data, color = "#B8791F" }) {
         return (
           <g key={i}>
             <rect x={x} y={y} width={barW} height={h} fill={color} rx={2} />
-            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
+            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="Inter, sans-serif" fill="#7A857D">
               {MESI_BREVI[i]}
             </text>
           </g>
@@ -2916,9 +3027,9 @@ function PrintBarChart({ data, color = "#B8791F" }) {
 // Grafico combinato (consumo diurno/notturno impilati + produzione) per il
 // documento di stampa: stessa logica di ComboChart ma disegnata come SVG con
 // viewBox fisso, così si adatta sempre alla larghezza della pagina stampata.
-function PrintComboChart({ diurno, notturno, produzione }) {
+function PrintComboChart({ diurno, notturno, produzione, compact = false }) {
   const width = 760;
-  const height = 150;
+  const height = compact ? 90 : 150;
   const totali = diurno.map((d, i) => d + (notturno[i] || 0));
   const max = Math.max(...totali, ...produzione, 1);
   const n = diurno.length;
@@ -2937,10 +3048,10 @@ function PrintComboChart({ diurno, notturno, produzione }) {
         const hProd = (p / max) * height;
         return (
           <g key={i}>
-            <rect x={gx} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1.5} />
-            <rect x={gx} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1.5} />
-            <rect x={gx + barW + barGap} y={height - hProd} width={barW} height={hProd} fill="#B8541F" rx={1.5} />
-            <text x={gx + groupW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
+            <rect x={gx} y={height - hDiu} width={barW} height={hDiu} fill="#F5A524" rx={1.5} />
+            <rect x={gx} y={height - hDiu - hNot} width={barW} height={hNot} fill="#0B3D2E" rx={1.5} />
+            <rect x={gx + barW + barGap} y={height - hProd} width={barW} height={hProd} fill="#14B8A6" rx={1.5} />
+            <text x={gx + groupW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="Inter, sans-serif" fill="#7A857D">
               {MESI_BREVI[i]}
             </text>
           </g>
@@ -2971,9 +3082,9 @@ function PrintConsumptionChart({ diurno, notturno }) {
         const x = i * (barW + gap);
         return (
           <g key={i}>
-            <rect x={x} y={height - hDiu} width={barW} height={hDiu} fill="#D9932A" rx={1.5} />
-            <rect x={x} y={height - hDiu - hNot} width={barW} height={hNot} fill="#4A5FD6" rx={1.5} />
-            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="IBM Plex Mono" fill="#7A857D">
+            <rect x={x} y={height - hDiu} width={barW} height={hDiu} fill="#F5A524" rx={1.5} />
+            <rect x={x} y={height - hDiu - hNot} width={barW} height={hNot} fill="#0B3D2E" rx={1.5} />
+            <text x={x + barW / 2} y={height + 16} textAnchor="middle" fontSize="9" fontFamily="Inter, sans-serif" fill="#7A857D">
               {MESI_BREVI[i]}
             </text>
           </g>
@@ -3178,8 +3289,8 @@ function Donut({ values, colors, centerLabel, centerSub }) {
         <circle r={r} fill="none" stroke="var(--surface-2)" strokeWidth="20" />
         {arcs}
       </g>
-      <text x="70" y="66" textAnchor="middle" fontFamily="IBM Plex Mono" fontWeight="700" fontSize="20" fill="var(--ink)">{centerLabel}</text>
-      <text x="70" y="82" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-faint)">{centerSub}</text>
+      <text x="70" y="66" textAnchor="middle" fontFamily="Inter, sans-serif" fontWeight="700" fontSize="20" fill="var(--ink)">{centerLabel}</text>
+      <text x="70" y="82" textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="10" fill="var(--ink-faint)">{centerSub}</text>
     </svg>
   );
 }
@@ -3293,9 +3404,9 @@ function RoofSvg({ segments, colors }) {
       {top[0] && <polygon points="150,20 30,70 30,160 150,140" fill={colors[0]} opacity="0.75" />}
       {bottom[0] && <polygon points="30,160 270,160 270,178 30,178" fill={colors[2]} opacity="0.75" />}
       <line x1="150" y1="20" x2="150" y2="140" stroke="var(--surface)" strokeWidth="2" />
-      {top[1] && <text x="205" y="105" fontFamily="IBM Plex Mono" fontSize="9" fill="var(--surface)" textAnchor="middle">{top[1].areaMeters2.toFixed(0)} m²</text>}
-      {top[0] && <text x="95" y="105" fontFamily="IBM Plex Mono" fontSize="9" fill="var(--surface)" textAnchor="middle">{top[0].areaMeters2.toFixed(0)} m²</text>}
-      {bottom[0] && <text x="150" y="171" fontFamily="IBM Plex Mono" fontSize="8" fill="var(--surface)" textAnchor="middle">{bottom[0].areaMeters2.toFixed(0)} m²</text>}
+      {top[1] && <text x="205" y="105" fontFamily="Inter, sans-serif" fontSize="9" fill="var(--surface)" textAnchor="middle">{top[1].areaMeters2.toFixed(0)} m²</text>}
+      {top[0] && <text x="95" y="105" fontFamily="Inter, sans-serif" fontSize="9" fill="var(--surface)" textAnchor="middle">{top[0].areaMeters2.toFixed(0)} m²</text>}
+      {bottom[0] && <text x="150" y="171" fontFamily="Inter, sans-serif" fontSize="8" fill="var(--surface)" textAnchor="middle">{bottom[0].areaMeters2.toFixed(0)} m²</text>}
     </svg>
   );
 }

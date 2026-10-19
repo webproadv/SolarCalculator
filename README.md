@@ -187,3 +187,11 @@ useEffect(() => {
 ### Keep-alive di Supabase (piano Free)
 
 Per evitare la pausa del progetto Supabase dopo 7 giorni di inattività, `vercel.json` definisce un cron (ogni 3 giorni alle 06:00 UTC) che chiama `GET /api/cron/supabase-keepalive`, la quale esegue una query di conteggio su `progetti` e `authorized_emails`. La rotta è protetta da `CRON_SECRET`: va creata la variabile d'ambiente `CRON_SECRET` (stringa casuale lunga) su Vercel, poi redeploy. Dettagli e procedura riutilizzabile in `docs/PROCEDURA-KEEPALIVE-SUPABASE.md`.
+
+## Versione v2 della grafica (branch `v2-ui`)
+
+Nuovo look "Verde energia" e layout adatto al telefono, senza toccare la logica di calcolo:
+
+- `app/theme-v2.css` (caricato dopo `globals.css`): palette, tipografia (Inter + Manrope), barra superiore, stepper a 3 passi, navigazione a pillole tra le sezioni A–E, card KPI, barra azioni a griglia su mobile, pulsanti Indietro/Avanti fissi in basso, tabelle scorrevoli, lista progetti a schede su telefono.
+- PDF "Stampa preventivo" in stile bolletta energetica: copertina con riquadri cliente/consumi, riquadro importo evidenziato, KPI, barra di composizione del beneficio, grafico consumi/produzione, indicatori circolari; testate di pagina colorate, tabelle a righe alternate, "Pagina X di N".
+- `main` resta invariato: per tornare al vecchio look basta non fare il merge (o togliere l'import di `theme-v2.css` in `app/layout.jsx`).

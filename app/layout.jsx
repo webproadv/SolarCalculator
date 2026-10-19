@@ -1,6 +1,9 @@
 import "./globals.css";
+import "./theme-v2.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { itIT } from "@clerk/localizations";
+
+export const viewport = { width: "device-width", initialScale: 1, themeColor: "#0B3D2E" };
 
 export const metadata = {
   title: "Preventivo Fotovoltaico",
@@ -19,7 +22,7 @@ export default function RootLayout({ children }) {
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="true" />
           <link
-            href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
             rel="stylesheet"
           />
         </head>

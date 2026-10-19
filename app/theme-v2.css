@@ -1,0 +1,424 @@
+/* ==========================================================================
+   TEMA v2 — "Verde energia"
+   Caricato DOPO globals.css (vedi layout.jsx): ridefinisce palette, tipografia
+   e componenti senza toccare la logica. Per tornare al look precedente basta
+   togliere l'import di questo file (o usare il branch main).
+   Sezioni: 1 token · 2 base · 3 barra superiore · 4 componenti · 5 wizard ·
+   6 dashboard · 7 responsive/mobile · 8 PDF "bolletta" (@media print)
+   ========================================================================== */
+
+/* ---------- 1. TOKEN ---------- */
+:root{
+  --bg:#F2F7F4;
+  --surface:#FFFFFF;
+  --surface-2:#E8F0EB;
+  --surface-3:#DCE8E0;
+  --ink:#10231B;
+  --ink-soft:#43584D;
+  --ink-faint:#74887C;
+  --border:#D5E2DA;
+  --border-strong:#B9CCC0;
+
+  --primary:#0E7C5A;
+  --primary-600:#0B6A4D;
+  --primary-700:#085640;
+  --primary-ink:#FFFFFF;
+  --deep:#0B3D2E;
+  --deep-2:#0F5A43;
+  --sun:#F5A524;
+  --sun-soft:#FEF3DC;
+
+  --accent:#0E7C5A;
+  --accent-soft:#DDF3EA;
+  --accent-ink:#0B4F3A;
+
+  --shadow:0 1px 2px rgba(16,35,27,.05), 0 10px 28px -14px rgba(16,35,27,.18);
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1511; --surface:#131F19; --surface-2:#1A2922; --surface-3:#22342B;
+    --ink:#E9F2ED; --ink-soft:#A8BDB0; --ink-faint:#74887C;
+    --border:#25372E; --border-strong:#32473C;
+    --primary:#22B07F; --primary-600:#1A9A6D; --primary-700:#168560;
+    --accent:#22B07F; --accent-soft:#12302A; --accent-ink:#9FE3C6;
+    --sun-soft:#2D2411;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1511; --surface:#131F19; --surface-2:#1A2922; --surface-3:#22342B;
+  --ink:#E9F2ED; --ink-soft:#A8BDB0; --ink-faint:#74887C;
+  --border:#25372E; --border-strong:#32473C;
+  --primary:#22B07F; --primary-600:#1A9A6D; --primary-700:#168560;
+  --accent:#22B07F; --accent-soft:#12302A; --accent-ink:#9FE3C6;
+  --sun-soft:#2D2411;
+}
+
+/* ---------- 2. BASE ---------- */
+body{ font-family:"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:15px; }
+h1,h2,h3,.disp{ font-family:"Manrope", "Inter", sans-serif; font-weight:800; letter-spacing:-.015em; }
+.mono, .kpi-value, .posa-num, .stat-mini .v, .suggested-box .v, .noleggio-box .v, .legend-val, .econ-val{
+  font-family:"Inter", sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+}
+td.num, th.num, .num{ font-family:"Inter", sans-serif; font-variant-numeric:tabular-nums; }
+.field input[type="text"], .field input[type="number"], .field input[type="email"], .field select,
+.mensile-table input[type="number"]{ font-family:"Inter", sans-serif; font-variant-numeric:tabular-nums; }
+::selection{ background:var(--accent-soft); }
+.field input:focus, .field select:focus, button:focus-visible, a:focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
+.hide-sm{ display:inline; }
+.wrap{ overflow-x:clip; }
+
+.map-tag, .block-tag, .bar-month, .combo-month-label, .pill, .rate-tab, .cashflow-title, .cashflow-table th,
+.cashflow-table td.num, .cashflow-table td.cf-saldo, .cashflow-table td.cf-delta, .eyebrow, .posa-num, .posa-lab,
+.mensile-table, .mensile-table input{ font-family:"Inter", sans-serif; font-variant-numeric:tabular-nums; }
+.cashflow-title{ font-family:"Manrope", "Inter", sans-serif; font-weight:800; }
+.cashflow-table td.num, .cashflow-table td.cf-saldo, .cashflow-table td.cf-delta{ white-space:nowrap; }
+
+/* ---------- 3. BARRA SUPERIORE ---------- */
+.topnav{
+  background:linear-gradient(100deg, var(--deep) 0%, var(--deep-2) 100%);
+  border-bottom:none; backdrop-filter:none;
+  box-shadow:0 6px 24px -12px rgba(11,61,46,.55);
+}
+.topnav-inner{ height:62px; }
+.brandmark{ gap:11px; }
+a.brandmark-link{ color:#fff; border-radius:10px; padding:4px 6px 4px 2px; transition:background .15s; }
+a.brandmark-link:hover{ background:rgba(255,255,255,.08); }
+a.brandmark-link:hover b{ text-decoration:none; }
+.brandmark b{ display:block; font-family:"Manrope"; font-weight:800; font-size:16px; letter-spacing:-.01em; color:#fff; line-height:1.15; }
+.brandmark small{ display:block; color:rgba(255,255,255,.68); font-size:11.5px; letter-spacing:.02em; line-height:1.2; }
+.brand-sun{ flex:none; filter:drop-shadow(0 0 8px rgba(251,191,36,.45)); }
+.topnav .btn-ghost{ color:#fff; border-color:rgba(255,255,255,.28); background:rgba(255,255,255,.06); }
+.topnav .btn-ghost:hover{ background:rgba(255,255,255,.16); }
+.topnav-actions{ gap:10px; }
+
+/* ---------- 4. COMPONENTI ---------- */
+.card{ border-radius:var(--radius); padding:26px 28px; }
+.card h3{ font-size:16px; }
+.card-note, .card .card-note{ font-size:12.5px; }
+
+.btn{ border-radius:10px; padding:11px 20px; font-weight:600; letter-spacing:.005em; min-height:44px; justify-content:center; text-decoration:none; }
+.btn-primary{ background:var(--primary); color:#fff; box-shadow:0 6px 16px -8px rgba(14,124,90,.8); }
+.btn-primary:hover{ background:var(--primary-600); filter:none; }
+.btn-primary:active{ background:var(--primary-700); }
+.btn-ghost{ color:var(--ink); border-color:var(--border-strong); background:var(--surface); }
+.btn-ghost:hover{ background:var(--surface-2); border-color:var(--primary); }
+.btn-sm{ min-height:34px; padding:6px 12px; }
+a.btn, a.btn:hover{ text-decoration:none; }
+
+.field label{ font-size:11.5px; letter-spacing:.06em; }
+.field input[type="text"], .field input[type="number"], .field input[type="email"], .field select{
+  padding:12px 14px; border-radius:10px; font-size:15px; background:var(--surface);
+}
+.field input:focus, .field select:focus{ border-color:var(--primary); outline:3px solid color-mix(in srgb, var(--primary) 22%, transparent); outline-offset:0; }
+
+.mode-tabs{ background:var(--surface-2); padding:4px; border-radius:12px; gap:4px; }
+.mode-tabs > *{ border-radius:9px; }
+
+.dropzone{ border-radius:14px; border-color:var(--border-strong); background:var(--surface-2); padding:30px 20px; }
+.dropzone:hover, .dropzone.dragover{ border-color:var(--primary); background:var(--accent-soft); }
+
+.info-box{ background:var(--accent-soft); border-color:color-mix(in srgb, var(--primary) 40%, transparent); color:var(--accent-ink); border-radius:10px; }
+.error-box{ border-radius:10px; }
+.pill.good{ background:var(--accent-soft); color:var(--primary-700); }
+.suggested-box{ background:var(--accent-soft); border-color:color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius:12px; }
+.suggested-box .v{ color:var(--primary); }
+.btn-primary:disabled{ box-shadow:none; }
+.modal-card{ border-radius:18px; }
+.demo-banner{ font-family:"Inter"; letter-spacing:.03em; }
+
+table th{ letter-spacing:.06em; }
+
+/* ---------- 5. WIZARD ---------- */
+.wizard{ max-width:680px; padding:36px 20px 100px; }
+.stepper{ list-style:none; margin:0 0 26px; padding:0; display:flex; align-items:center; gap:0; }
+.stepper-item{ display:flex; align-items:center; gap:10px; flex:1; color:var(--ink-faint); font-weight:600; font-size:13.5px; position:relative; }
+.stepper-item:not(:last-child)::after{ content:""; flex:1; height:2px; margin:0 12px; background:var(--border-strong); border-radius:2px; }
+.stepper-item.done:not(:last-child)::after{ background:var(--primary); }
+.stepper-num{ width:30px; height:30px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:13px; font-weight:700; background:var(--surface); border:2px solid var(--border-strong); color:var(--ink-faint); }
+.stepper-item.active{ color:var(--ink); }
+.stepper-item.active .stepper-num{ background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 0 0 5px color-mix(in srgb, var(--primary) 18%, transparent); }
+.stepper-item.done{ color:var(--primary-700); }
+.stepper-item.done .stepper-num{ background:var(--accent-soft); border-color:var(--primary); color:var(--primary-700); }
+.btn-row{ gap:12px; }
+
+/* ---------- 6. DASHBOARD ---------- */
+.save-bar{ flex-wrap:wrap; gap:10px; margin-top:22px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+.save-bar .btn{ font-size:13.5px; padding:9px 14px; min-height:40px; }
+.save-bar .btn-sm{ min-height:40px; padding:9px 14px; font-size:13.5px; }
+
+.section-nav{
+  position:sticky; top:62px; z-index:30; display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none; padding:10px 0; margin:0 -2px;
+  background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:blur(8px);
+}
+.section-nav::-webkit-scrollbar{ display:none; }
+.section-nav a{
+  flex:none; display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; text-decoration:none;
+  font-size:13px; font-weight:600; color:var(--ink-soft); background:var(--surface); border:1px solid var(--border);
+  transition:background .12s, color .12s, border-color .12s;
+}
+.section-nav a b{ display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--primary); color:#fff; font-size:11px; font-weight:800; }
+.section-nav a:hover{ border-color:var(--primary); color:var(--primary-700); }
+.section-nav a:last-child b{ background:var(--deep); }
+
+.header{ padding:14px 0 10px; }
+.company-card{ border-radius:18px; border:none; box-shadow:0 18px 40px -22px rgba(11,61,46,.45); }
+.company-main{ padding:30px 32px; background:linear-gradient(150deg, var(--deep) 0%, var(--deep-2) 100%); color:#fff; border-right:none; }
+.company-main h1{ color:#fff; font-size:28px; }
+.company-main .eyebrow{ color:#FBBF24; font-family:"Inter"; font-weight:700; letter-spacing:.14em; }
+.company-sub{ color:rgba(255,255,255,.75); }
+.meta-item dt{ color:rgba(255,255,255,.6); font-size:10.5px; }
+.meta-item dd{ color:#fff; }
+.meta-item dd.mono{ font-weight:600; }
+.company-map{ min-height:220px; }
+.map-tag{ border-radius:999px; font-family:"Inter"; font-weight:600; }
+
+.kpi-strip{ gap:12px; background:transparent; border:none; box-shadow:none; overflow:visible; margin-top:16px; }
+.kpi{ border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 18px 16px; position:relative; overflow:hidden; }
+.kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--border-strong); }
+.kpi.accent::before{ background:var(--sun); }
+.kpi.good::before{ background:var(--primary); }
+.kpi-label{ letter-spacing:.07em; font-weight:600; }
+.kpi-value{ font-weight:800; font-size:26px; }
+.kpi.accent .kpi-value{ color:var(--deep-2); }
+.kpi.good .kpi-value{ color:var(--primary); }
+
+section.block{ margin-top:44px; scroll-margin-top:130px; }
+.block-head{ align-items:center; gap:12px; margin-bottom:18px; padding-bottom:12px; border-bottom:2px solid var(--border); }
+.block-tag{ background:var(--primary); color:#fff; border-radius:9px; font-family:"Manrope"; font-weight:800; font-size:13px; padding:4px 11px; }
+.block-head h2{ font-size:21px; }
+.block--noleggio .block-tag{ background:var(--c-noleggio); }
+
+.bar{ background:var(--primary); }
+.cashflow-card{ border-radius:14px; }
+
+/* ---------- 7. RESPONSIVE / MOBILE ---------- */
+@media (max-width: 1024px){
+  .kpi-strip{ grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width: 860px){
+  .company-main{ border-bottom:none; }
+  .kpi-strip{ grid-template-columns:repeat(2,1fr); }
+  .kpi:last-child:nth-child(odd){ grid-column:1 / -1; }
+}
+@media (max-width: 640px){
+  body{ font-size:15px; }
+  .wrap{ padding:0 14px 90px; }
+  .wrap .demo-banner{ margin-left:-14px !important; margin-right:-14px !important; font-size:11.5px; }
+  .topnav-inner{ padding:0 12px; height:56px; }
+  .section-nav{ top:56px; margin:0 -14px; padding:10px 14px; }
+  section.block{ scroll-margin-top:118px; margin-top:34px; }
+  .hide-sm{ display:none; }
+  .brandmark small{ display:none; }
+  .brandmark b{ font-size:15px; }
+  .topnav-actions{ gap:8px; }
+  .topnav-actions .btn{ padding:8px 12px; min-height:40px; }
+
+  .wizard{ padding:22px 14px 110px; }
+  .card{ padding:20px 16px; border-radius:16px; }
+  .stepper-label{ display:none; }
+  .stepper-item.active .stepper-label{ display:inline; }
+  .stepper-item:not(:last-child)::after{ margin:0 8px; }
+
+  /* Campi: 16px evita lo zoom automatico di iOS al focus. */
+  .field input[type="text"], .field input[type="number"], .field input[type="email"], .field select,
+  .mensile-table input[type="number"]{ font-size:16px; min-height:46px; }
+  .field{ margin-bottom:16px; }
+
+  /* Pulsanti "Indietro / Avanti" fissi in basso: sempre raggiungibili col pollice. */
+  .wizard .btn-row{
+    position:sticky; bottom:0; z-index:20; margin:22px -16px -20px; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    background:color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter:blur(8px); border-top:1px solid var(--border);
+    border-radius:0 0 16px 16px;
+  }
+  .wizard .btn-row .btn{ flex:1; }
+  .btn-row{ flex-wrap:wrap; }
+
+  .upload-actions{ flex-direction:column; }
+  .mode-tabs{ flex-wrap:nowrap; }
+  .mode-tabs > *{ flex:1; font-size:13px; padding:10px 8px; }
+
+  .header{ padding:10px 0 6px; }
+  .company-card{ border-radius:16px; }
+  .company-main{ padding:22px 18px; }
+  .company-main h1{ font-size:22px; }
+  .company-map{ min-height:200px; }
+  .meta-grid{ grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .meta-item dd{ font-size:13px; word-break:break-word; }
+
+  .kpi-strip{ gap:10px; }
+  .kpi{ padding:14px 14px 12px; }
+  .kpi-value{ font-size:21px; }
+  .kpi-label{ font-size:10.5px; }
+  .kpi-delta{ font-size:11px; }
+
+  .block-head h2{ font-size:18px; }
+  .grid-2, .grid-3{ gap:14px; }
+  .donut-row{ flex-direction:column; align-items:flex-start; gap:16px; }
+
+  /* Barra azioni del preventivo: griglia a 2 colonne con pulsanti grandi. */
+  .save-bar{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px; }
+  .save-bar > .btn, .save-bar > a.btn{ width:100%; font-size:13px; padding:10px 8px; }
+  .save-bar > .btn:first-child{ grid-column:1 / -1; }
+  .save-bar .save-feedback{ grid-column:1 / -1; }
+
+  /* Tabelle larghe: scorrono in orizzontale dentro la card invece di rompere la pagina. */
+  .card{ overflow-x:auto; }
+  .card table:not(.mensile-table){ min-width:0; }
+  .cashflow-card{ overflow-x:auto; }
+  .cashflow-table{ min-width:560px; }
+  .combo-chart{ height:170px; }
+  .econ-row{ flex-wrap:wrap; gap:6px 12px; }
+  .econ-label{ width:100%; }
+  .econ-val{ width:auto; margin-left:auto; }
+
+  .rate-tabs{ flex-wrap:wrap; }
+  .rate-tab{ min-width:calc(33% - 6px); }
+
+  /* Simulazione posa (RoofPlanner) */
+  .posa-summary{ grid-template-columns:1fr 1fr; }
+  .posa-toolbar{ gap:6px; }
+  .posa-hint{ width:100%; margin-bottom:2px; }
+  .posa-actions .btn, .posa-views .btn{ flex:1 1 calc(50% - 6px); }
+  .modal-card{ padding:20px 18px; border-radius:16px; }
+  .modal-actions .btn{ flex:1; }
+
+  /* Lista progetti: su telefono la tabella diventa una pila di schede. */
+  .progetti-table, .progetti-table thead, .progetti-table tbody, .progetti-table tr, .progetti-table td{ display:block; width:100% !important; }
+  .progetti-table thead{ display:none; }
+  .progetti-table tr{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .progetti-table td{ border:none; padding:3px 0; white-space:normal; overflow:visible; text-overflow:clip; display:flex; justify-content:space-between; gap:12px; }
+  .progetti-table td:first-child{ font-weight:700; font-size:15px; }
+  .progetti-actions{ flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .progetti-actions .btn-sm{ flex:1 1 calc(50% - 8px); min-height:40px; }
+}
+@media (max-width: 380px){
+  .kpi-strip{ grid-template-columns:1fr; }
+  .kpi:last-child:nth-child(odd){ grid-column:auto; }
+  .save-bar{ grid-template-columns:1fr; }
+}
+@media (prefers-reduced-motion: reduce){ *{ scroll-behavior:auto !important; transition:none !important; animation-duration:.01ms !important; } }
+html{ scroll-behavior:smooth; }
+
+/* ---------- 8. PDF "BOLLETTA" ---------- */
+@page{ size:A4; margin:12mm 12mm 14mm; }
+
+@media print{
+  .wrap{ padding:0 !important; max-width:none !important; margin:0 !important; }
+  .print-report{ font-family:"Inter", ui-sans-serif, system-ui, sans-serif; color:#10231B; font-size:11.5px; line-height:1.45; }
+  .pr-page{ min-height:262mm; }
+
+  /* Fascia di testata di ogni pagina (come la testata di una bolletta) */
+  .pr-running-header{
+    background:linear-gradient(100deg, #0B3D2E 0%, #0F5A43 100%); color:#fff; border:none; border-radius:8px;
+    padding:9px 14px; margin:0 0 16px; font-family:"Inter"; font-size:9.5px; font-weight:600; letter-spacing:.06em;
+    text-transform:uppercase; align-items:center; position:relative; overflow:hidden;
+  }
+  .pr-running-header::after{ content:""; position:absolute; right:0; top:0; bottom:0; width:6px; background:#F5A524; }
+  .pr-running-header span:last-child{ margin-right:10px; color:#FBD38D; }
+
+  .pr-footer{
+    font-family:"Inter"; font-size:8.5px; color:#74887C; border-top:2px solid #0E7C5A; padding-top:7px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .pr-footer span:first-child{ font-weight:700; color:#0B3D2E; }
+
+  .pr-eyebrow{ font-family:"Inter"; color:#0E7C5A; font-weight:700; letter-spacing:.14em; font-size:9.5px; }
+  .pr-h1{ font-family:"Manrope", "Inter", sans-serif; font-weight:800; font-size:25px; letter-spacing:-.02em; color:#0B3D2E; }
+  .pr-h2{ font-family:"Manrope", "Inter", sans-serif; font-weight:800; font-size:17px; color:#0B3D2E; letter-spacing:-.01em; margin-bottom:6px; }
+  .pr-h3{ font-family:"Manrope", "Inter", sans-serif; font-weight:800; font-size:12.5px; color:#0B3D2E; margin:13px 0 6px; padding-left:9px; border-left:4px solid #F5A524; line-height:1.2; }
+  .pr-lead{ color:#43584D; }
+  .pr-note{ color:#74887C; font-size:9.5px; }
+  .pr-section-tag{ font-family:"Manrope"; background:#0E7C5A; border-radius:7px; font-weight:800; padding:3px 10px; }
+  .pr-section-tag.pr-tag-noleggio{ background:#7C3AED; }
+
+  /* -- Tabelle: intestazione verde, righe alternate, bordi sottili -- */
+  .pr-table{ border-collapse:separate; border-spacing:0; border:1px solid #CFE0D6; border-radius:8px; overflow:hidden; font-size:10.5px; margin:6px 0 8px; }
+  .pr-table th, .pr-table td{ border:none; border-bottom:1px solid #E3EEE8; padding:4.5px 10px; }
+  .pr-table th{ background:#0E7C5A; color:#fff; font-family:"Inter"; font-size:8.5px; letter-spacing:.07em; font-weight:700; }
+  .pr-table tbody tr:nth-child(even) td{ background:#F4FAF7; }
+  .pr-table tr:last-child td{ border-bottom:none; }
+  .pr-table td.num, .pr-table th.num{ font-family:"Inter"; font-variant-numeric:tabular-nums; font-weight:600; }
+  .pr-table tr.total td{ background:#DDF3EA !important; color:#0B3D2E; font-weight:800; border-top:1.5px solid #0E7C5A; }
+  .pr-noleggio-table th{ background:#7C3AED; color:#fff; }
+
+  .pr-legend{ font-size:9px; gap:14px; }
+  .pr-photo{ border:1px solid #CFE0D6; border-radius:10px; }
+
+  .pr-noleggio-highlight{ border-radius:10px; }
+  .pr-noleggio-highlight .v{ font-family:"Manrope"; font-weight:800; }
+
+  .pr-contact{ border:1px solid #CFE0D6; border-left:5px solid #0E7C5A; background:#F4FAF7; border-radius:10px; }
+  .pr-contact .pr-contact-name{ font-family:"Manrope"; font-weight:800; color:#0B3D2E; }
+  .pr-contact .pr-contact-rows b{ color:#0E7C5A; font-family:"Inter"; font-weight:700; }
+
+  /* ---- Copertina "bolletta" ---- */
+  .pb-top{ display:flex; justify-content:space-between; align-items:stretch; gap:14px; margin:0 0 14px; }
+  .pb-brand{
+    flex:1.35; display:flex; align-items:center; gap:12px; padding:14px 18px; border-radius:12px; color:#fff;
+    background:linear-gradient(110deg, #0B3D2E 0%, #0F5A43 70%, #14805F 100%); position:relative; overflow:hidden;
+  }
+  .pb-brand::after{ content:""; position:absolute; right:-30px; top:-30px; width:120px; height:120px; border-radius:50%; background:radial-gradient(circle, rgba(251,191,36,.55), rgba(251,191,36,0) 70%); }
+  .pb-brand svg{ flex:none; }
+  .pb-brand .pb-name{ font-family:"Manrope"; font-weight:800; font-size:20px; letter-spacing:-.02em; line-height:1.05; }
+  .pb-brand .pb-tag{ font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; color:#FBD38D; font-weight:700; margin-top:3px; }
+  .pb-doc{ flex:1; border:1px solid #CFE0D6; border-radius:12px; padding:10px 14px; background:#F4FAF7; display:grid; gap:5px; align-content:center; }
+  .pb-doc div{ display:flex; justify-content:space-between; gap:10px; font-size:9.5px; }
+  .pb-doc dt{ color:#74887C; text-transform:uppercase; letter-spacing:.05em; font-size:8px; font-weight:600; align-self:center; }
+  .pb-doc dd{ margin:0; font-weight:700; color:#0B3D2E; text-align:right; }
+
+  .pb-title{ display:flex; align-items:baseline; justify-content:space-between; margin:6px 0 10px; border-bottom:2px solid #0E7C5A; padding-bottom:7px; }
+  .pb-title .pr-h1{ margin:0; font-size:22px; }
+  .pb-title .pb-sub{ font-size:9px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#0E7C5A; }
+
+  .pb-boxes{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  .pb-box{ border:1px solid #CFE0D6; border-radius:12px; overflow:hidden; background:#fff; }
+  .pb-box h4{ margin:0; background:#E8F0EB; color:#0B3D2E; font-family:"Manrope"; font-weight:800; font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; padding:7px 12px; border-bottom:1px solid #CFE0D6; }
+  .pb-box dl{ margin:0; padding:8px 12px 10px; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:10px; }
+  .pb-box dt{ color:#74887C; }
+  .pb-box dd{ margin:0; font-weight:600; text-align:right; word-break:break-word; }
+
+  /* Riquadro importo, come "Totale da pagare" in bolletta */
+  .pb-total{
+    display:grid; grid-template-columns:1.2fr 1fr; border-radius:14px; overflow:hidden; border:1.5px solid #0E7C5A; margin:0 0 12px;
+  }
+  .pb-total-main{ background:linear-gradient(120deg, #0E7C5A, #0B6A4D); color:#fff; padding:14px 18px; display:flex; flex-direction:column; justify-content:center; }
+  .pb-total-main .l{ font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#C6F0DF; }
+  .pb-total-main .v{ font-family:"Manrope"; font-weight:800; font-size:30px; letter-spacing:-.02em; line-height:1.1; margin-top:3px; }
+  .pb-total-main .v small{ font-size:12px; font-weight:600; color:#C6F0DF; margin-left:4px; letter-spacing:0; }
+  .pb-total-main .s{ font-size:9px; color:#C6F0DF; margin-top:4px; }
+  .pb-total-side{ background:#FEF3DC; padding:12px 16px; display:grid; gap:6px; align-content:center; }
+  .pb-total-side div{ display:flex; justify-content:space-between; font-size:10px; }
+  .pb-total-side span{ color:#6B4A0E; }
+  .pb-total-side b{ color:#3B2706; font-weight:800; font-variant-numeric:tabular-nums; }
+
+  .pb-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 12px; }
+  .pb-kpi{ border:1px solid #CFE0D6; border-radius:10px; padding:9px 10px 8px; background:#fff; position:relative; overflow:hidden; }
+  .pb-kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:#0E7C5A; }
+  .pb-kpi:nth-child(2)::before{ background:#F5A524; }
+  .pb-kpi:nth-child(3)::before{ background:#14B8A6; }
+  .pb-kpi:nth-child(4)::before{ background:#0B3D2E; }
+  .pb-kpi .v{ display:block; font-family:"Manrope"; font-weight:800; font-size:16px; color:#0B3D2E; padding-left:4px; }
+  .pb-kpi .l{ display:block; font-size:8.5px; color:#74887C; padding-left:4px; margin-top:2px; line-height:1.25; }
+
+  .pb-panel{ border:1px solid #CFE0D6; border-radius:12px; padding:10px 14px 8px; margin-bottom:10px; background:#fff; }
+  .pb-panel h4{ margin:0 0 8px; font-family:"Manrope"; font-weight:800; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:#0B3D2E; display:flex; justify-content:space-between; align-items:center; }
+  .pb-panel h4 span{ font-family:"Inter"; font-weight:500; letter-spacing:0; text-transform:none; color:#74887C; font-size:8.5px; }
+
+  /* Barra impilata "come si compone il beneficio" */
+  .pb-stack{ display:flex; height:14px; border-radius:7px; overflow:hidden; background:#E8F0EB; }
+  .pb-stack i{ display:block; height:100%; }
+  .pb-stack-legend{ display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:7px; font-size:9px; color:#43584D; }
+  .pb-stack-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .pb-stack-legend i{ width:8px; height:8px; border-radius:2px; display:inline-block; }
+  .pb-stack-legend b{ font-variant-numeric:tabular-nums; color:#10231B; }
+
+  .pb-gauges{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .pb-gauge{ display:flex; align-items:center; gap:10px; }
+  .pb-gauge svg{ flex:none; }
+  .pb-gauge .l{ font-size:8.5px; color:#74887C; line-height:1.3; }
+  .pb-gauge .l b{ display:block; font-size:10px; color:#10231B; margin-bottom:1px; }
+
+  .pb-foot-note{ font-size:8.5px; color:#74887C; line-height:1.5; margin:6px 2px 10px; }
+}
