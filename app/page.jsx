@@ -1553,9 +1553,11 @@ export default function Page() {
         <Dashboard
           company={company}
           quote={quote}
-          onRestart={() => {
+          onModifica={(savedId) => {
+            // torna ai dati inseriti mantenendoli; se il progetto è già salvato
+            // ne conserva l'id, così "Aggiorna" non crea un duplicato.
+            if (savedId) setProgettoCaricato((prev) => ({ ...(prev || {}), id: savedId }));
             setStep(0);
-            setProgettoCaricato(null);
           }}
           roofImages={roofImages}
           roofImagesLoading={roofImagesLoading}
@@ -1588,7 +1590,7 @@ export default function Page() {
 function Dashboard({
   company,
   quote,
-  onRestart,
+  onModifica,
   roofImages,
   roofImagesLoading,
   roofImagesError,
@@ -1932,19 +1934,35 @@ function Dashboard({
       )}
 
       <div className="save-bar">
-        <button className="btn btn-primary" onClick={salvaProgetto} disabled={saveState.status === "loading"}>
+        <button
+          className="btn btn-primary"
+          onClick={salvaProgetto}
+          disabled={saveState.status === "loading"}
+          title={savedProjectId ? "Aggiorna il progetto già salvato" : "Salva il progetto (non ancora salvato)"}
+        >
           {saveState.status === "loading" && <span className="spinner" />}
-          {savedProjectId ? "💾 Aggiorna progetto" : "💾 Salva progetto"}
+          💾 Aggiorna
         </button>
-        {savedProjectId && (
-          <button className="btn btn-ghost" onClick={salvaComeNuovaRevisione} disabled={saveState.status === "loading"}>
-            🆕 Salva come nuova revisione
-          </button>
-        )}
-        <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa preventivo</button>
+        <button
+          className="btn btn-ghost"
+          onClick={salvaComeNuovaRevisione}
+          disabled={saveState.status === "loading"}
+          title="Salva come nuovo progetto/revisione, senza sovrascrivere quello attuale"
+        >
+          🆕 Salva Nuovo
+        </button>
+        <button className="btn btn-ghost" onClick={handleStampa}>🖨️ Stampa Analisi</button>
+        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
+          {pdfNoleggioLoading && <span className="spinner" />}
+          📄 Noleggio
+        </button>
+        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf-acquisto")} disabled={pdfAcquistoLoading}>
+          {pdfAcquistoLoading && <span className="spinner" />}
+          📄 Acquisto
+        </button>
         {String(company.piva || "").replace(/\D/g, "").length === 11 && (
           <a
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost"
             style={{ textDecoration: "none" }}
             href={linkBandi(company.piva)}
             target="_blank"
@@ -1954,15 +1972,7 @@ function Dashboard({
             🏛️ Bandi
           </a>
         )}
-        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf")} disabled={pdfNoleggioLoading}>
-          {pdfNoleggioLoading && <span className="spinner" />}
-          📄 PDF Noleggio
-        </button>
-        <button className="btn btn-ghost" onClick={() => eseguiAzioneNoleggio("pdf-acquisto")} disabled={pdfAcquistoLoading}>
-          {pdfAcquistoLoading && <span className="spinner" />}
-          📄 PDF Acquisto
-        </button>
-        <button className="btn btn-ghost" onClick={onRestart}>← Nuovo preventivo</button>
+        <button className="btn btn-ghost" onClick={() => onModifica(savedProjectId)} title="Torna ai dati inseriti per modificarli">✏️ Modifica</button>
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
         {noleggioError && <span className="save-feedback error">{noleggioError}</span>}
