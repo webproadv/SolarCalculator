@@ -56,3 +56,12 @@ create index if not exists progetti_created_at_idx on public.progetti (created_a
 create index if not exists progetti_piva_idx on public.progetti (piva);
 
 alter table public.progetti enable row level security;
+
+-- ============================================================
+-- Grant Data API (richiesti da Supabase per le tabelle create dopo il
+-- 30/10/2026). L'app usa SOLO la service role lato server: anon e
+-- authenticated NON ricevono alcun permesso (e la RLS senza policy li
+-- bloccherebbe comunque).
+-- ============================================================
+grant select, insert, update, delete on public.authorized_emails to service_role;
+grant select, insert, update, delete on public.progetti to service_role;
