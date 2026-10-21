@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RoofScene3D from "./RoofScene3D";
 import OrientamentoDial from "./OrientamentoDial";
 import { decodificaRilievo, stimaPiano } from "../lib/rilievo";
+import { segmentaTetto, areeDaSegmentazione } from "../lib/roofSegmentation";
 import {
   MODULO,
   POSA_DEFAULT,
@@ -109,6 +110,7 @@ export default function RoofPlanner({
   const [lavoro, setLavoro] = useState("");
   const [rilievo, setRilievo] = useState(null);
   const [rilievoErr, setRilievoErr] = useState("");
+  const [autoMsg, setAutoMsg] = useState(null); // { tipo: "ok"|"warn", testo }
   const [fotoGoogle, setFotoGoogle] = useState(true);
   const ref3d = useRef(null);
 
@@ -318,6 +320,34 @@ export default function RoofPlanner({
     setRilievoErr("");
     setScena3d(null);
   }, [centro.lat, centro.lng]);
+
+  // Rilevamento automatico di falde e ostacoli dal DSM (roof fitting). Sostituisce
+  // le aree create dal rilevamento precedente e lascia intatte quelle disegnate a mano.
+  function rilevaTettoAutomatico() {
+    if (!rilievo) return;
+    setAutoMsg(null);
+    try {
+      const seg = segmentaTetto(rilievo);
+      if (!seg.falde.length) {
+        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta: disegna le aree a mano." });
+        return;
+      }
+      const nuove = areeDaSegmentazione(seg, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
+        ...a,
+        orient: Math.max(-180, Math.min(180, a.orient)),
+      }));
+      const manuali = aree.filter((a) => !a.auto);
+      aggiornaPosa({ aree: [...manuali, ...nuove] });
+      setSelezionata(nuove[0]?.id || null);
+      const nOst = seg.ostacoli.length;
+      setAutoMsg({
+        tipo: seg.avvisi.length ? "warn" : "ok",
+        testo: `Riconosciute ${nuove.length} ${nuove.length === 1 ? "area" : "aree"} e ${nOst} ${nOst === 1 ? "ostacolo" : "ostacoli"} (camini, lucernari, unità tecniche). Controlla sulla mappa e correggi a mano se serve.${seg.avvisi.length ? " " + seg.avvisi.join(" ") : ""}`,
+      });
+    } catch (e) {
+      setAutoMsg({ tipo: "warn", testo: `Rilevamento automatico non riuscito: ${e.message}` });
+    }
+  }
 
   async function caricaRilievo() {
     setLavoro("Scarico il rilievo reale da Google Solar…");
@@ -672,7 +702,10 @@ export default function RoofPlanner({
               <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
               Mostra la foto Google sulla mappa
             </label>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaTettoAutomatico} disabled={Boolean(lavoro)} title="Riconosce falde e ostacoli dal rilievo e posiziona le aree">
+              ✨ Rileva tetto automaticamente
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); }}>
               Rimuovi rilievo
             </button>
             {!rilievo.georefEsatta && (
@@ -684,6 +717,9 @@ export default function RoofPlanner({
         )}
       </div>
       {rilievoErr && <div className="error-box" style={{ marginTop: 8 }}>{rilievoErr}</div>}
+      {autoMsg && (
+        <div className={autoMsg.tipo === "ok" ? "info-box" : "error-box"} style={{ marginTop: 8 }}>{autoMsg.testo}</div>
+      )}
 
       {aree.length > 1 && (
         <div className="posa-ripartizione">
