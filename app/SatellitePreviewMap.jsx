@@ -62,7 +62,23 @@ export default function SatellitePreviewMap({ lat, lng, zoom = DEFAULT_ZOOM, onV
       };
       map.once("load", emitView);
       map.on("moveend", emitView);
-      map.on("error", (e) => setError(e?.error?.message || "Errore nel caricamento della mappa."));
+      map.on("error", (e) => {
+        // Messaggio diagnostico: stato HTTP + risorsa che ha fallito (senza token),
+        // così si capisce subito se è un problema di token/dominio (401/403),
+        // di quota o di rete, invece del generico "errore nel caricamento".
+        const err = e?.error || {};
+        console.error("Mapbox error:", e);
+        const stato = err.status ? `HTTP ${err.status}` : "";
+        const risorsa = (err.url || "").replace(/access_token=[^&]+/, "access_token=…").slice(0, 120);
+        const suggerimento =
+          err.status === 401 || err.status === 403
+            ? " — token Mapbox non valido, scaduto o non autorizzato per questo dominio: controlla il token su account.mapbox.com"
+            : err.status === 429
+              ? " — quota Mapbox esaurita"
+              : "";
+        const testo = [err.message, stato, risorsa].filter(Boolean).join(" · ");
+        setError(`Errore nel caricamento della mappa${testo ? `: ${testo}` : ""}${suggerimento}.`);
+      });
     }).catch(() => setError("Impossibile caricare la mappa satellitare (mapbox-gl)."));
 
     return () => {
