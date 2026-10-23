@@ -36,7 +36,7 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 const LAYER_OVERLAY = [
   "aree-fill", "aree-line", "ostacoli-fill", "ostacoli-line",
-  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "bozza-line", "bozza-pts",
+  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "perimetro-fill", "perimetro-line", "bozza-line", "bozza-pts",
 ];
 
 const vuoto = { type: "FeatureCollection", features: [] };
@@ -105,6 +105,7 @@ export default function RoofPlanner({
   const [modo, setModo] = useState(null); // null | "area" | "ostacolo"
   const [bozza, setBozza] = useState([]);
   const [daConfigurare, setDaConfigurare] = useState(null); // { ring }
+  const [perimetro, setPerimetro] = useState(null); // anello lng/lat scelto dall'utente per il rilevamento automatico
   const [selezionata, setSelezionata] = useState(null);
   const [scena3d, setScena3d] = useState(null);
   const [lavoro, setLavoro] = useState("");
@@ -196,6 +197,13 @@ export default function RoofPlanner({
     };
   }, [aree, calcolo, centro, selezionata]);
 
+  const geoPerimetro = useMemo(() => {
+    if (!perimetro || perimetro.length < 3) return vuoto;
+    const ring = perimetro.map((q) => q.slice());
+    ring.push(ring[0]);
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] };
+  }, [perimetro]);
+
   const geoBozza = useMemo(() => {
     const feats = [];
     if (bozza.length >= 2) feats.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: bozza } });
@@ -234,7 +242,7 @@ export default function RoofPlanner({
 
         map.on("load", () => {
           const src = (id) => map.addSource(id, { type: "geojson", data: vuoto });
-          ["aree", "ostacoli", "pann-usati", "pann-extra", "bozza-linea", "bozza-punti"].forEach(src);
+          ["aree", "ostacoli", "pann-usati", "pann-extra", "perimetro", "bozza-linea", "bozza-punti"].forEach(src);
           map.addLayer({ id: "aree-fill", type: "fill", source: "aree", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.14 } });
           map.addLayer({
             id: "aree-line", type: "line", source: "aree",
@@ -245,6 +253,8 @@ export default function RoofPlanner({
           map.addLayer({ id: "pann-extra-fill", type: "fill", source: "pann-extra", paint: { "fill-color": "#93c5fd", "fill-opacity": 0.35 } });
           map.addLayer({ id: "pann-usati-fill", type: "fill", source: "pann-usati", paint: { "fill-color": "#1e3a8a", "fill-opacity": 0.88 } });
           map.addLayer({ id: "pann-usati-line", type: "line", source: "pann-usati", paint: { "line-color": "#bfdbfe", "line-width": 0.6 } });
+          map.addLayer({ id: "perimetro-fill", type: "fill", source: "perimetro", paint: { "fill-color": "#38bdf8", "fill-opacity": 0.12 } });
+          map.addLayer({ id: "perimetro-line", type: "line", source: "perimetro", paint: { "line-color": "#38bdf8", "line-width": 2.5, "line-dasharray": [3, 2] } });
           map.addLayer({ id: "bozza-line", type: "line", source: "bozza-linea", paint: { "line-color": "#22d3ee", "line-width": 2.5, "line-dasharray": [2, 1] } });
           map.addLayer({ id: "bozza-pts", type: "circle", source: "bozza-punti", paint: { "circle-radius": 5, "circle-color": "#22d3ee", "circle-stroke-color": "#0e7490", "circle-stroke-width": 2 } });
           setMapPronta(true);
@@ -302,6 +312,11 @@ export default function RoofPlanner({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapPronta) return;
+    map.getSource("perimetro")?.setData(geoPerimetro);
+  }, [geoPerimetro, mapPronta]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapPronta) return;
     map.getSource("bozza-linea")?.setData(geoBozza.linea);
     map.getSource("bozza-punti")?.setData(geoBozza.punti);
   }, [geoBozza, mapPronta]);
@@ -319,6 +334,8 @@ export default function RoofPlanner({
     setRilievo(null);
     setRilievoErr("");
     setScena3d(null);
+    setPerimetro(null);
+    setAutoMsg(null);
   }, [centro.lat, centro.lng]);
 
   // Rilevamento automatico di falde e ostacoli dal DSM (roof fitting). Sostituisce
@@ -326,10 +343,15 @@ export default function RoofPlanner({
   function rilevaTettoAutomatico() {
     if (!rilievo) return;
     setAutoMsg(null);
+    if (!perimetro || perimetro.length < 3) {
+      setAutoMsg({ tipo: "warn", testo: "Prima seleziona sulla mappa l'area da analizzare (pulsante «Seleziona area»)." });
+      return;
+    }
     try {
-      const seg = segmentaTetto(rilievo);
+      const poligono = perimetro.map((q) => lngLatToLocale(centro, q));
+      const seg = segmentaTetto(rilievo, { poligono });
       if (!seg.falde.length) {
-        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta: disegna le aree a mano." });
+        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta in quest'area: disegna le aree a mano." });
         return;
       }
       const nuove = areeDaSegmentazione(seg, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
@@ -411,6 +433,13 @@ export default function RoofPlanner({
       return;
     }
     setErrore("");
+    if (modoRef.current === "perimetro") {
+      setPerimetro(pulita);
+      setAutoMsg(null);
+      setBozza([]);
+      setModo(null);
+      return;
+    }
     if (modoRef.current === "ostacolo") {
       const loc = lngLatToLocale(centro, pulita[0]);
       let target = areeRef.current.find((a) => a.id === selezRef.current);
@@ -672,7 +701,7 @@ export default function RoofPlanner({
         ) : (
           <>
             <span className="posa-hint">
-              {modo === "area" ? "Clicca gli angoli dell'area." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
+              {modo === "area" ? "Clicca gli angoli dell'area." : modo === "perimetro" ? "Clicca gli angoli dell'edificio da analizzare: racchiudi solo il tetto che ti interessa." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
             </span>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBozza((b) => b.slice(0, -1))} disabled={!bozza.length}>↶ Annulla ultimo punto</button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => chiudiBozzaRef.current()} disabled={bozza.length < 3}>Chiudi figura</button>
@@ -702,10 +731,18 @@ export default function RoofPlanner({
               <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
               Mostra la foto Google sulla mappa
             </label>
-            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaTettoAutomatico} disabled={Boolean(lavoro)} title="Riconosce falde e ostacoli dal rilievo e posiziona le aree">
-              ✨ Rileva tetto automaticamente
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("perimetro")} disabled={Boolean(lavoro) || Boolean(modo)} title="Disegna il contorno dell'edificio da analizzare: gli edifici vicini restano esclusi">
+              ① {perimetro ? "Ridisegna" : "Seleziona"} area da analizzare
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaTettoAutomatico} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title={perimetro ? "Riconosce falde e ostacoli nell'area selezionata" : "Seleziona prima l'area da analizzare"}>
+              ② ✨ Rileva falde e ostacoli
+            </button>
+            {perimetro && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPerimetro(null); setAutoMsg(null); }}>
+                Cancella selezione
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setPerimetro(null); }}>
               Rimuovi rilievo
             </button>
             {!rilievo.georefEsatta && (
