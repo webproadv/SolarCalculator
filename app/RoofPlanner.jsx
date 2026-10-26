@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RoofScene3D from "./RoofScene3D";
 import OrientamentoDial from "./OrientamentoDial";
 import { decodificaRilievo, stimaPiano } from "../lib/rilievo";
-import { segmentaTetto, areeDaSegmentazione } from "../lib/roofSegmentation";
+import { segmentaTetto, areeDaSegmentazione, ordinaPerSud, distanzaDalSud, etichettaEsposizione } from "../lib/roofSegmentation";
 import {
   MODULO,
   POSA_DEFAULT,
@@ -36,7 +36,7 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 const LAYER_OVERLAY = [
   "aree-fill", "aree-line", "ostacoli-fill", "ostacoli-line",
-  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "perimetro-fill", "perimetro-line", "bozza-line", "bozza-pts",
+  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "cand-fill", "cand-line", "cand-num", "bozza-line", "bozza-pts",
 ];
 
 const vuoto = { type: "FeatureCollection", features: [] };
@@ -105,7 +105,12 @@ export default function RoofPlanner({
   const [modo, setModo] = useState(null); // null | "area" | "ostacolo"
   const [bozza, setBozza] = useState([]);
   const [daConfigurare, setDaConfigurare] = useState(null); // { ring }
-  const [perimetro, setPerimetro] = useState(null); // anello lng/lat scelto dall'utente per il rilevamento automatico
+  // falde candidate trovate dal rilievo (tutte, anche quelle di edifici vicini):
+  // l'utente sceglie quali appartengono all'azienda. { seg, falde[], ostacoli }
+  const [candidati, setCandidati] = useState([]);
+  const [selCand, setSelCand] = useState([]); // id delle falde scelte
+  const candRef = useRef([]);
+  useEffect(() => { candRef.current = candidati; }, [candidati]);
   const [selezionata, setSelezionata] = useState(null);
   const [scena3d, setScena3d] = useState(null);
   const [lavoro, setLavoro] = useState("");
@@ -197,12 +202,20 @@ export default function RoofPlanner({
     };
   }, [aree, calcolo, centro, selezionata]);
 
-  const geoPerimetro = useMemo(() => {
-    if (!perimetro || perimetro.length < 3) return vuoto;
-    const ring = perimetro.map((q) => q.slice());
-    ring.push(ring[0]);
-    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] };
-  }, [perimetro]);
+  const geoCand = useMemo(() => {
+    const poli = [];
+    const num = [];
+    candidati.forEach((f, i) => {
+      const ring = f.ring.map((q) => q.slice());
+      ring.push(ring[0]);
+      const sel = selCand.includes(f.id) ? 1 : 0;
+      poli.push({ type: "Feature", properties: { id: f.id, sel }, geometry: { type: "Polygon", coordinates: [ring] } });
+      const cx = f.ring.reduce((t, q) => t + q[0], 0) / f.ring.length;
+      const cy = f.ring.reduce((t, q) => t + q[1], 0) / f.ring.length;
+      num.push({ type: "Feature", properties: { n: String(i + 1), sel }, geometry: { type: "Point", coordinates: [cx, cy] } });
+    });
+    return { poli: { type: "FeatureCollection", features: poli }, num: { type: "FeatureCollection", features: num } };
+  }, [candidati, selCand]);
 
   const geoBozza = useMemo(() => {
     const feats = [];
@@ -242,7 +255,7 @@ export default function RoofPlanner({
 
         map.on("load", () => {
           const src = (id) => map.addSource(id, { type: "geojson", data: vuoto });
-          ["aree", "ostacoli", "pann-usati", "pann-extra", "perimetro", "bozza-linea", "bozza-punti"].forEach(src);
+          ["aree", "ostacoli", "pann-usati", "pann-extra", "cand", "cand-num", "bozza-linea", "bozza-punti"].forEach(src);
           map.addLayer({ id: "aree-fill", type: "fill", source: "aree", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.14 } });
           map.addLayer({
             id: "aree-line", type: "line", source: "aree",
@@ -253,8 +266,19 @@ export default function RoofPlanner({
           map.addLayer({ id: "pann-extra-fill", type: "fill", source: "pann-extra", paint: { "fill-color": "#93c5fd", "fill-opacity": 0.35 } });
           map.addLayer({ id: "pann-usati-fill", type: "fill", source: "pann-usati", paint: { "fill-color": "#1e3a8a", "fill-opacity": 0.88 } });
           map.addLayer({ id: "pann-usati-line", type: "line", source: "pann-usati", paint: { "line-color": "#bfdbfe", "line-width": 0.6 } });
-          map.addLayer({ id: "perimetro-fill", type: "fill", source: "perimetro", paint: { "fill-color": "#38bdf8", "fill-opacity": 0.12 } });
-          map.addLayer({ id: "perimetro-line", type: "line", source: "perimetro", paint: { "line-color": "#38bdf8", "line-width": 2.5, "line-dasharray": [3, 2] } });
+          map.addLayer({
+            id: "cand-fill", type: "fill", source: "cand",
+            paint: { "fill-color": ["case", ["==", ["get", "sel"], 1], "#22c55e", "#94a3b8"], "fill-opacity": ["case", ["==", ["get", "sel"], 1], 0.45, 0.25] },
+          });
+          map.addLayer({
+            id: "cand-line", type: "line", source: "cand",
+            paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#bbf7d0", "#e2e8f0"], "line-width": 2.5, "line-dasharray": [3, 2] },
+          });
+          map.addLayer({
+            id: "cand-num", type: "symbol", source: "cand-num",
+            layout: { "text-field": ["get", "n"], "text-size": 18, "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"], "text-allow-overlap": true },
+            paint: { "text-color": "#ffffff", "text-halo-color": "#0f172a", "text-halo-width": 2 },
+          });
           map.addLayer({ id: "bozza-line", type: "line", source: "bozza-linea", paint: { "line-color": "#22d3ee", "line-width": 2.5, "line-dasharray": [2, 1] } });
           map.addLayer({ id: "bozza-pts", type: "circle", source: "bozza-punti", paint: { "circle-radius": 5, "circle-color": "#22d3ee", "circle-stroke-color": "#0e7490", "circle-stroke-width": 2 } });
           setMapPronta(true);
@@ -264,8 +288,14 @@ export default function RoofPlanner({
           const m = modoRef.current;
           const pt = [e.lngLat.lng, e.lngLat.lat];
           if (!m) {
-            // selezione di un'area cliccandoci sopra
             const loc = lngLatToLocale(centro, pt);
+            // scelta delle falde candidate (rilevamento automatico): click = seleziona/deseleziona
+            const cand = candRef.current.find((f) => puntoInPoligono(loc, f.ring.map((q) => lngLatToLocale(centro, q))));
+            if (cand) {
+              setSelCand((v) => (v.includes(cand.id) ? v.filter((x) => x !== cand.id) : [...v, cand.id]));
+              return;
+            }
+            // selezione di un'area cliccandoci sopra
             const trovata = areeRef.current.find((a) => puntoInPoligono(loc, a.ring.map((p) => lngLatToLocale(centro, p))));
             setSelezionata(trovata ? trovata.id : null);
             return;
@@ -312,8 +342,9 @@ export default function RoofPlanner({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapPronta) return;
-    map.getSource("perimetro")?.setData(geoPerimetro);
-  }, [geoPerimetro, mapPronta]);
+    map.getSource("cand")?.setData(geoCand.poli);
+    map.getSource("cand-num")?.setData(geoCand.num);
+  }, [geoCand, mapPronta]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapPronta) return;
@@ -334,41 +365,67 @@ export default function RoofPlanner({
     setRilievo(null);
     setRilievoErr("");
     setScena3d(null);
-    setPerimetro(null);
+    setCandidati([]);
+    setSelCand([]);
     setAutoMsg(null);
   }, [centro.lat, centro.lng]);
 
-  // Rilevamento automatico di falde e ostacoli dal DSM (roof fitting). Sostituisce
-  // le aree create dal rilevamento precedente e lascia intatte quelle disegnate a mano.
-  function rilevaTettoAutomatico() {
+  // Rilevamento automatico in due tempi:
+  //  1. "Rileva falde": il rilievo (DSM) viene scomposto in falde, anche quelle degli
+  //     edifici vicini; compaiono sulla mappa numerate, da scegliere con un click.
+  //  2. "Usa le falde scelte": solo quelle selezionate diventano aree di posa, con i
+  //     loro ostacoli, ordinate dando la precedenza a quelle rivolte a Sud (i moduli
+  //     riempiono le aree in ordine). Le aree disegnate a mano restano intatte.
+  function rilevaFalde() {
     if (!rilievo) return;
     setAutoMsg(null);
-    if (!perimetro || perimetro.length < 3) {
-      setAutoMsg({ tipo: "warn", testo: "Prima seleziona sulla mappa l'area da analizzare (pulsante «Seleziona area»)." });
-      return;
-    }
     try {
-      const poligono = perimetro.map((q) => lngLatToLocale(centro, q));
-      const seg = segmentaTetto(rilievo, { poligono });
+      const seg = segmentaTetto(rilievo, { tutti: true });
       if (!seg.falde.length) {
-        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta in quest'area: disegna le aree a mano." });
+        setCandidati([]);
+        setSelCand([]);
+        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta: disegna le aree a mano." });
         return;
       }
-      const nuove = areeDaSegmentazione(seg, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
-        ...a,
-        orient: Math.max(-180, Math.min(180, a.orient)),
+      const ordinate = ordinaPerSud(seg.falde).map((f) => ({
+        ...f,
+        ring: f.anello.map((q) => localeToLngLat(centro, q)),
+        ostRing: f.ostacoli.map((o) => o.map((q) => localeToLngLat(centro, q))),
       }));
-      const manuali = aree.filter((a) => !a.auto);
-      aggiornaPosa({ aree: [...manuali, ...nuove] });
-      setSelezionata(nuove[0]?.id || null);
-      const nOst = seg.ostacoli.length;
+      setCandidati(ordinate);
+      // preselezione: la falda più vicina al punto indicato (il sito) e le sue vicine di pari esposizione sono una scelta dell'utente: parte vuota
+      setSelCand([]);
       setAutoMsg({
         tipo: seg.avvisi.length ? "warn" : "ok",
-        testo: `Riconosciute ${nuove.length} ${nuove.length === 1 ? "area" : "aree"} e ${nOst} ${nOst === 1 ? "ostacolo" : "ostacoli"} (camini, lucernari, unità tecniche). Controlla sulla mappa e correggi a mano se serve.${seg.avvisi.length ? " " + seg.avvisi.join(" ") : ""}`,
+        testo: `Trovate ${ordinate.length} ${ordinate.length === 1 ? "falda" : "falde"} (ordinate dalla più rivolta a Sud). Clicca sulla mappa, o spunta nell'elenco, solo quelle dell'azienda.${seg.avvisi.length ? " " + seg.avvisi.join(" ") : ""}`,
       });
     } catch (e) {
       setAutoMsg({ tipo: "warn", testo: `Rilevamento automatico non riuscito: ${e.message}` });
     }
+  }
+
+  function usaFaldeScelte() {
+    const scelte = candidati.filter((f) => selCand.includes(f.id));
+    if (!scelte.length) {
+      setAutoMsg({ tipo: "warn", testo: "Seleziona almeno una falda dell'azienda (click sulla mappa o spunta nell'elenco)." });
+      return;
+    }
+    const ordinate = ordinaPerSud(scelte);
+    const aree0 = areeDaSegmentazione({ falde: ordinate }, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
+      ...a,
+      nome: `Falda ${i + 1} · ${etichettaEsposizione(ordinate[i])}`,
+      orient: Math.max(-180, Math.min(180, a.orient)),
+    }));
+    const manuali = aree.filter((a) => !a.auto);
+    aggiornaPosa({ aree: [...manuali, ...aree0] });
+    setSelezionata(aree0[0]?.id || null);
+    const nOst = ordinate.reduce((t, f) => t + f.ostacoli.length, 0);
+    setCandidati([]);
+    setSelCand([]);
+    setAutoMsg({
+      tipo: "ok",
+      testo: `Create ${aree0.length} ${aree0.length === 1 ? "area" : "aree"} con ${nOst} ${nOst === 1 ? "ostacolo" : "ostacoli"}. I moduli riempiono prima le falde più rivolte a Sud. Controlla sulla mappa e correggi a mano se serve.`,
+    });
   }
 
   async function caricaRilievo() {
@@ -433,13 +490,6 @@ export default function RoofPlanner({
       return;
     }
     setErrore("");
-    if (modoRef.current === "perimetro") {
-      setPerimetro(pulita);
-      setAutoMsg(null);
-      setBozza([]);
-      setModo(null);
-      return;
-    }
     if (modoRef.current === "ostacolo") {
       const loc = lngLatToLocale(centro, pulita[0]);
       let target = areeRef.current.find((a) => a.id === selezRef.current);
@@ -701,7 +751,7 @@ export default function RoofPlanner({
         ) : (
           <>
             <span className="posa-hint">
-              {modo === "area" ? "Clicca gli angoli dell'area." : modo === "perimetro" ? "Clicca gli angoli dell'edificio da analizzare: racchiudi solo il tetto che ti interessa." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
+              {modo === "area" ? "Clicca gli angoli dell'area." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
             </span>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBozza((b) => b.slice(0, -1))} disabled={!bozza.length}>↶ Annulla ultimo punto</button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => chiudiBozzaRef.current()} disabled={bozza.length < 3}>Chiudi figura</button>
@@ -731,18 +781,10 @@ export default function RoofPlanner({
               <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
               Mostra la foto Google sulla mappa
             </label>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("perimetro")} disabled={Boolean(lavoro) || Boolean(modo)} title="Disegna il contorno dell'edificio da analizzare: gli edifici vicini restano esclusi">
-              ① {perimetro ? "Ridisegna" : "Seleziona"} area da analizzare
+            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaFalde} disabled={Boolean(lavoro) || Boolean(modo)} title="Scompone il rilievo in falde e ostacoli: poi scegli tu quelle dell'azienda">
+              ① ✨ Rileva falde dal rilievo
             </button>
-            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaTettoAutomatico} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title={perimetro ? "Riconosce falde e ostacoli nell'area selezionata" : "Seleziona prima l'area da analizzare"}>
-              ② ✨ Rileva falde e ostacoli
-            </button>
-            {perimetro && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPerimetro(null); setAutoMsg(null); }}>
-                Cancella selezione
-              </button>
-            )}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setPerimetro(null); }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setCandidati([]); setSelCand([]); }}>
               Rimuovi rilievo
             </button>
             {!rilievo.georefEsatta && (
@@ -756,6 +798,38 @@ export default function RoofPlanner({
       {rilievoErr && <div className="error-box" style={{ marginTop: 8 }}>{rilievoErr}</div>}
       {autoMsg && (
         <div className={autoMsg.tipo === "ok" ? "info-box" : "error-box"} style={{ marginTop: 8 }}>{autoMsg.testo}</div>
+      )}
+      {candidati.length > 0 && (
+        <div className="posa-cand" style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>② Scegli le falde dell&apos;azienda</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand(candidati.filter((f) => distanzaDalSud(f) <= 67).map((f) => f.id))}>
+              Seleziona quelle rivolte a Sud
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand(candidati.map((f) => f.id))}>Tutte</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand([])}>Nessuna</button>
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            {candidati.map((f, i) => (
+              <label key={f.id} className="posa-check" style={{ margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={selCand.includes(f.id)}
+                  onChange={() => setSelCand((v) => (v.includes(f.id) ? v.filter((x) => x !== f.id) : [...v, f.id]))}
+                />
+                <strong>{i + 1}</strong> · {etichettaEsposizione(f)}
+                {f.tipo === "falda" ? ` (${f.orientApp > 0 ? "+" : ""}${f.orientApp}°, pend. ${Math.round(f.pendenzaDeg)}°)` : ""} · {Math.round(f.areaM2)} m²
+                {f.ostacoli.length ? ` · ${f.ostacoli.length} ostacol${f.ostacoli.length === 1 ? "o" : "i"}` : ""}
+              </label>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={usaFaldeScelte} disabled={!selCand.length}>
+              ③ Usa le falde scelte ({selCand.length})
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCandidati([]); setSelCand([]); setAutoMsg(null); }}>Annulla</button>
+          </div>
+        </div>
       )}
 
       {aree.length > 1 && (
