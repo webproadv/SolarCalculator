@@ -2222,7 +2222,7 @@ function Dashboard({
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Simulazione posa pannelli sul tetto</h3>
           <div className="card-note">
-            Disegna sulla mappa le aree del tetto adatte all&apos;installazione: l&apos;app dispone i moduli Trina Vertex S+ da 505 Wp (1961 × 1134 mm), li conta e genera una vista 3D da inserire nel PDF. Simulazione indicativa, da verificare in sopralluogo.
+            Disegna sulla mappa le aree del tetto adatte all&apos;installazione: l&apos;app dispone i moduli (di default Trina Vertex S+ da 505 Wp, 1961 × 1134 mm; potenza e misure sono modificabili), li conta e genera una vista 3D da inserire nel PDF. Simulazione indicativa, da verificare in sopralluogo.
           </div>
           {Number.isFinite(centroPosa.lat) && Number.isFinite(centroPosa.lng) ? (
             <RoofPlanner
@@ -2787,7 +2787,7 @@ function PrintReport({
                   </td>
                   <td className="num">{a.areaM2}</td>
                   <td className="num">{a.moduli}</td>
-                  <td className="num">{fmtNumIt((a.moduli * 505) / 1000, 2)}</td>
+                  <td className="num">{fmtNumIt((a.moduli * (posaPdf.riepilogo?.moduloWp || 505)) / 1000, 2)}</td>
                 </tr>
               ))}
               <tr className="total">
@@ -2798,7 +2798,7 @@ function PrintReport({
             </tbody>
           </table>
           <p className="pr-note">
-            Moduli {posaPdf.riepilogo?.modulo} (505 Wp, 1961 × 1134 mm).
+            Moduli {posaPdf.riepilogo?.modulo} ({posaPdf.riepilogo?.moduloWp || 505} Wp, {(posaPdf.riepilogo?.moduloDim || [1961, 1134]).join(" × ")} mm).
             {posaPdf.riepilogo?.ripartizione
               ? ` Ripartizione dei moduli tra le aree: ${posaPdf.riepilogo.ripartizione === "uniforme" ? "uniforme (stessa quantità su ogni area, nei limiti della capacità)" : "in ordine (la prima area si riempie, le successive ricevono il resto)"}.`
               : ""}

@@ -24,6 +24,7 @@ import { quotaIn, quotaPiano } from "../lib/rilievo";
 //    altezzaM: quota del tetto/gronda (solo senza rilievo)
 //    aree: [{ nome, colore, tipo, poligono, ostacoli, pendenzaDeg, azimutDiscesa, piano? }]
 //    pannelli: [{ cx, cy, az, tilt, portrait, areaIdx }]
+//    modulo?: { l, w }   // lato lungo e corto del modulo (m); default 1,961 × 1,134
 //    rilievo?: { nx, ny, passoM, estensioneM, quote(Float32Array, m) }   // DSM reale
 //  }
 //  stile: "colori" | "foto"      mostraAree: evidenzia le aree con il loro colore
@@ -672,9 +673,10 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className, stile = 
       for (const portrait of [true, false]) {
         const lista = gruppi[portrait ? "true" : "false"];
         if (!lista.length) continue;
-        const w = portrait ? MODULO.w : MODULO.l; // lungo la fila (x locale)
-        const s = portrait ? MODULO.l : MODULO.w; // lungo la pendenza (z locale)
-        const geo = new THREE.BoxGeometry(w, MODULO.t, s);
+        const dimM = { ...MODULO, ...(scena.modulo || {}) };
+        const w = portrait ? dimM.w : dimM.l; // lungo la fila (x locale)
+        const s = portrait ? dimM.l : dimM.w; // lungo la pendenza (z locale)
+        const geo = new THREE.BoxGeometry(w, dimM.t, s);
         // texture solo sulla faccia superiore (indice 2 = +Y)
         const mats = [0, 1, 2, 3, 4, 5].map((i) =>
           i === 2

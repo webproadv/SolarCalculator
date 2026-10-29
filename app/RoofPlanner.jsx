@@ -73,8 +73,9 @@ function riduciImmagine(dataUrl, maxW, q = 0.82) {
     img.src = dataUrl;
   });
 }
-function firmaLayout(aree, n, ripartizione = "sequenziale") {
-  const base = [aree.map((a) => [a.ring, a.ostacoli, a.tipo, a.tilt, a.orient, a.disposizione, a.orientamentoModulo, a.margine, a.allinea]), n];
+function firmaLayout(aree, n, ripartizione = "sequenziale", modulo = null) {
+  const base = [aree.map((a) => [a.ring, a.ostacoli, a.tipo, a.tilt, a.orient, a.disposizione, a.orientamentoModulo, a.margine, a.allinea, a.riempiResti]), n];
+  if (modulo) base.push([modulo.wp, modulo.lunghezzaM, modulo.larghezzaM]);
   // la ripartizione entra nella firma solo se diversa dal default (compatibile con i salvataggi precedenti)
   if (ripartizione !== "sequenziale") base.push(ripartizione);
   const s = JSON.stringify(base);
@@ -82,6 +83,96 @@ function firmaLayout(aree, n, ripartizione = "sequenziale") {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return String(h);
 }
+// Nome nuovo con numero progressivo: "Falda 3 · Sud" -> "Falda 4 · Sud" (mai due falde con lo stesso nome)
+function nomeDistinto(nome, esistenti) {
+  const m = /^(.*?)(\d+)(.*)$/.exec(nome);
+  if (!m) return prossimoNome(esistenti, nome);
+  const [, pre, , post] = m;
+  let max = 0;
+  const re = new RegExp("^" + pre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(\\d+)");
+  for (const e of esistenti) {
+    const mm = re.exec(e);
+    if (mm) max = Math.max(max, Number(mm[1]));
+  }
+  return `${pre}${max + 1}${post}`;
+}
+function prossimoNome(esistenti, base) {
+  let max = 0;
+  const re = new RegExp("^" + base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " (\\d+)");
+  for (const e of esistenti) {
+    const mm = re.exec(e);
+    if (mm) max = Math.max(max, Number(mm[1]));
+  }
+  return `${base} ${max + 1}`;
+}
+
+// Moduli proposti (l'utente può comunque scrivere le misure che vuole). Il primo è il modulo di riferimento.
+const PRESET_MODULI = [
+  { id: "ref", nome: MODULO.nome, wp: MODULO.wp, lunghezzaM: MODULO.lunghezzaM, larghezzaM: MODULO.larghezzaM },
+  { id: "g430", nome: "Modulo generico 430 Wp", wp: 430, lunghezzaM: 1.722, larghezzaM: 1.134 },
+  { id: "g600", nome: "Modulo generico 600 Wp", wp: 600, lunghezzaM: 2.278, larghezzaM: 1.134 },
+];
+
+// modulo "pulito": numeri sensati, lato lungo sempre come lunghezza
+function normalizzaModulo(m) {
+  const base = m || {};
+  const num = (v, d, lo, hi) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
+  };
+  let l = num(base.lunghezzaM, MODULO.lunghezzaM, 0.5, 3.5);
+  let w = num(base.larghezzaM, MODULO.larghezzaM, 0.3, 2);
+  if (w > l) [l, w] = [w, l];
+  return {
+    nome: String(base.nome || MODULO.nome),
+    wp: Math.round(num(base.wp, MODULO.wp, 50, 1000)),
+    lunghezzaM: l,
+    larghezzaM: w,
+    spessoreM: MODULO.spessoreM,
+  };
+}
+
+// Layout dei moduli in una area (stesso calcolo per la mappa e per le scelte automatiche)
+function layoutDiArea(a, centro, modulo) {
+  const poligono = a.ring.map((p) => lngLatToLocale(centro, p));
+  const ostacoli = (a.ostacoli || []).map((o) => o.map((p) => lngLatToLocale(centro, p)));
+  const azBase = a.tipo === "piano" && a.disposizione === "estovest" ? 90 + a.orient : 180 + a.orient;
+  const layout = calcolaLayoutArea({
+    poligono,
+    ostacoli,
+    tipo: a.tipo,
+    azimutFaccia: norm360(azBase),
+    tiltDeg: a.tilt,
+    disposizione: a.disposizione,
+    allineaAiLati: a.allinea !== false,
+    orientamentoModulo: a.orientamentoModulo || "auto",
+    margineM: a.margine,
+    latitudine: centro.lat,
+    modulo,
+    riempiResti: a.riempiResti !== false,
+  });
+  return { ...layout, poligono, ostacoliLocali: ostacoli };
+}
+
+// campo numerico che si conferma all'uscita (così si può digitare senza che il valore cambi a metà)
+function NumeroConferma({ value, onCommit, min, max, step = 1, width = 90, id }) {
+  const [txt, setTxt] = useState(String(value));
+  useEffect(() => { setTxt(String(value)); }, [value]);
+  const conferma = () => {
+    const n = Number(String(txt).replace(",", "."));
+    if (Number.isFinite(n)) onCommit(Math.max(min, Math.min(max, n)));
+    else setTxt(String(value));
+  };
+  return (
+    <input
+      id={id} type="number" min={min} max={max} step={step} value={txt} style={{ width }}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={conferma}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+    />
+  );
+}
+
 let contatoreId = 1;
 const nuovoId = () => `a${Date.now().toString(36)}${contatoreId++}`;
 
@@ -98,6 +189,13 @@ export default function RoofPlanner({
   const aree = useMemo(() => posa?.aree || [], [posa]);
   const altezzaM = posa?.altezzaM ?? 8;
   const ripartizione = posa?.ripartizione === "uniforme" ? "uniforme" : "sequenziale";
+  const modulo = useMemo(() => normalizzaModulo(posa?.modulo), [posa?.modulo]);
+  const moduloDefault = modulo.wp === MODULO.wp && modulo.lunghezzaM === MODULO.lunghezzaM && modulo.larghezzaM === MODULO.larghezzaM;
+  const massimo = Boolean(posa?.massimo); // true: si dispone il massimo numero di moduli possibile, a prescindere dalla taglia richiesta
+  // moduli richiesti dal dimensionamento: con un modulo diverso da quello di riferimento si ricalcolano dai kWp
+  const richiestiTaglia = moduloDefault ? Math.round(pannelliRichiesti) : Math.max(0, Math.round((Number(kwpRichiesti) * 1000) / modulo.wp));
+  const presetModulo =
+    PRESET_MODULI.find((x) => Math.abs(x.wp - modulo.wp) < 0.5 && Math.abs(x.lunghezzaM - modulo.lunghezzaM) < 0.0005 && Math.abs(x.larghezzaM - modulo.larghezzaM) < 0.0005)?.id || "custom";
   const orientForm = Number.isFinite(Number(orientamentoForm)) ? Number(orientamentoForm) : 0;
   const tiltForm = Number.isFinite(Number(inclinazioneForm)) ? Number(inclinazioneForm) : 25;
 
@@ -120,6 +218,8 @@ export default function RoofPlanner({
   const [perimetro, setPerimetro] = useState(null); // anello lng/lat
   const [confermaCancella, setConfermaCancella] = useState(false);
   const [spostaAttivo, setSpostaAttivo] = useState(false); // trascinamento dell'area selezionata
+  const [distanzaCopiaM, setDistanzaCopiaM] = useState(1); // distanza tra una falda e la sua copia
+  const [candNascosti, setCandNascosti] = useState(null); // falde dell'ultimo rilevamento automatico, per rivederle: { falde, usate }
   const [stile3d, setStile3d] = useState("colori"); // "colori" | "foto"
   const [aree3d, setAree3d] = useState(true);
   const [scena3d, setScena3d] = useState(null);
@@ -152,30 +252,21 @@ export default function RoofPlanner({
     [onPosaChange, aree, altezzaM, posa]
   );
 
+  function impostaModulo(patch) {
+    const n = normalizzaModulo({ ...modulo, ...patch });
+    const pr = PRESET_MODULI.find((x) => Math.abs(x.wp - n.wp) < 0.5 && Math.abs(x.lunghezzaM - n.lunghezzaM) < 0.0005 && Math.abs(x.larghezzaM - n.larghezzaM) < 0.0005);
+    aggiornaPosa({ modulo: { ...n, nome: pr ? pr.nome : `Modulo personalizzato ${n.wp} Wp` } });
+  }
+
   /* ------------------------------------------------------------- calcolo */
 
   const calcolo = useMemo(() => {
-    const layouts = aree.map((a) => {
-      const poligono = a.ring.map((p) => lngLatToLocale(centro, p));
-      const ostacoli = (a.ostacoli || []).map((o) => o.map((p) => lngLatToLocale(centro, p)));
-      const azBase = a.tipo === "piano" && a.disposizione === "estovest" ? 90 + a.orient : 180 + a.orient;
-      const layout = calcolaLayoutArea({
-        poligono,
-        ostacoli,
-        tipo: a.tipo,
-        azimutFaccia: norm360(azBase),
-        tiltDeg: a.tilt,
-        disposizione: a.disposizione,
-        allineaAiLati: a.allinea !== false,
-        orientamentoModulo: a.orientamentoModulo || "auto",
-        margineM: a.margine,
-        latitudine: centro.lat,
-      });
-      return { ...layout, poligono, ostacoliLocali: ostacoli };
-    });
-    const dist = distribuisciPannelli(layouts, pannelliRichiesti, ripartizione);
-    return { layouts, dist };
-  }, [aree, centro, pannelliRichiesti, ripartizione]);
+    const layouts = aree.map((a) => layoutDiArea(a, centro, modulo));
+    const target = massimo ? layouts.reduce((t, l) => t + l.capacita, 0) : richiestiTaglia;
+    const dist = distribuisciPannelli(layouts, target, ripartizione, modulo.wp);
+    return { layouts, dist, target };
+  }, [aree, centro, modulo, massimo, richiestiTaglia, ripartizione]);
+  const richiesti = calcolo.target;
 
   // piano medio di ogni area dal rilievo reale (pendenza e verso della falda)
   const piani = useMemo(
@@ -440,39 +531,57 @@ export default function RoofPlanner({
     setCandidati([]);
     setSelCand([]);
     setPerimetro(null);
+    setCandNascosti(null);
     setAutoMsg(null);
   }, [centro.lat, centro.lng]);
 
-  // Rilevamento automatico in tre tempi:
-  //  1. l'utente disegna il PERIMETRO della zona da analizzare (l'edificio dell'azienda):
-  //     fuori da lì il rilievo non viene nemmeno guardato (edifici vicini esclusi);
-  //  2. "Rileva falde": dentro il perimetro il rilievo (DSM) viene scomposto in falde e
-  //     ostacoli; compaiono sulla mappa numerate, ordinate dalla più rivolta a Sud;
-  //  3. "Usa le falde scelte": quelle spuntate diventano aree di posa (i moduli
-  //     riempiono prima le più rivolte a Sud). Le aree disegnate a mano restano intatte.
-  function rilevaFalde() {
-    if (!rilievo) return;
+  // Rilevamento automatico.
+  //  1. l'utente disegna il PERIMETRO dell'area disponibile: fuori da lì il rilievo non viene
+  //     nemmeno guardato (edifici vicini esclusi);
+  //  2. "Rileva e disponi": dentro il perimetro il rilievo (DSM) viene scomposto in falde e
+  //     ostacoli e i moduli vengono posati da soli, al massimo che entra su ogni falda. Le
+  //     falde si usano in ordine di esposizione: Sud, poi Sud-Est/Sud-Ovest, poi Est/Ovest;
+  //     quelle a Nord solo se i moduli richiesti non entrano altrove;
+  //  3. le falde non usate si possono rivedere e aggiungere a mano ("Rivedi le falde rilevate").
+  //     Le aree disegnate a mano restano intatte.
+  function preparaCandidati(seg) {
+    return ordinaPerSud(seg.falde).map((f) => ({
+      ...f,
+      ring: f.anello.map((q) => localeToLngLat(centro, q)),
+      ostRing: f.ostacoli.map((o) => o.map((q) => localeToLngLat(centro, q))),
+    }));
+  }
+  function nomeFalda(f, i) {
+    return `Falda ${i + 1} · ${etichettaEsposizione(f)}`;
+  }
+  function areeDaFalde(falde, daNumero = 0) {
+    return areeDaSegmentazione({ falde }, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
+      ...a,
+      nome: nomeFalda(falde[i], daNumero + i),
+      orient: Math.max(-180, Math.min(180, a.orient)),
+    }));
+  }
+
+  // (modo manuale) mostra le falde trovate nel perimetro, da spuntare
+  async function rilevaFalde() {
     setAutoMsg(null);
     if (!perimetro || perimetro.length < 3) {
-      setAutoMsg({ tipo: "warn", testo: "Prima disegna sulla mappa il perimetro della zona da analizzare (pulsante «① Disegna perimetro»)." });
+      setAutoMsg({ tipo: "warn", testo: "Prima disegna sulla mappa l'area disponibile (pulsante «① Disegna area disponibile»)." });
       return;
     }
+    const ril = rilievo || (await caricaRilievo());
+    if (!ril) return;
     try {
       const poligono = perimetro.map((q) => lngLatToLocale(centro, q));
-      const seg = segmentaTetto(rilievo, { poligono });
+      const seg = segmentaTetto(ril, { poligono });
       if (!seg.falde.length) {
         setCandidati([]);
         setSelCand([]);
         setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta nel perimetro: ridisegnalo o disegna le aree a mano." });
         return;
       }
-      const ordinate = ordinaPerSud(seg.falde).map((f) => ({
-        ...f,
-        ring: f.anello.map((q) => localeToLngLat(centro, q)),
-        ostRing: f.ostacoli.map((o) => o.map((q) => localeToLngLat(centro, q))),
-      }));
+      const ordinate = preparaCandidati(seg);
       setCandidati(ordinate);
-      // tutto ciò che sta nel perimetro è già "dell'azienda": parte tutto spuntato, si tolgono a mano le falde che non servono
       setSelCand(ordinate.map((f) => f.id));
       const nOst = ordinate.reduce((t, f) => t + f.ostacoli.length, 0);
       setAutoMsg({
@@ -484,6 +593,79 @@ export default function RoofPlanner({
     }
   }
 
+  // rileva le falde nel perimetro E dispone i moduli: precedenza Sud → SE/SO → Est/Ovest → Nord
+  async function rilevaEDisponi() {
+    setAutoMsg(null);
+    setCandidati([]);
+    setSelCand([]);
+    if (!perimetro || perimetro.length < 3) {
+      setAutoMsg({ tipo: "warn", testo: "Prima disegna sulla mappa l'area disponibile (pulsante «① Disegna area disponibile»)." });
+      return;
+    }
+    const ril = rilievo || (await caricaRilievo());
+    if (!ril) {
+      setAutoMsg({ tipo: "warn", testo: "Rilievo Google non disponibile per questo indirizzo: disegna le aree a mano." });
+      return;
+    }
+    try {
+      setLavoro("Riconosco falde e ostacoli e dispongo i moduli…");
+      const poligono = perimetro.map((q) => lngLatToLocale(centro, q));
+      const seg = segmentaTetto(ril, { poligono });
+      if (!seg.falde.length) {
+        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta nel perimetro: ridisegnalo o disegna le aree a mano." });
+        return;
+      }
+      const ordinate = preparaCandidati(seg);
+      const manuali = aree.filter((a) => !a.auto);
+      // moduli già sistemati dalle aree disegnate a mano
+      const idxManuali = aree.map((a, i) => (a.auto ? -1 : i)).filter((i) => i >= 0);
+      let capacita = idxManuali.reduce((t, i) => t + calcolo.layouts[i].capacita, 0);
+      const obiettivo = massimo ? Infinity : richiestiTaglia;
+      const usate = [];
+      const nonUsate = [];
+      for (const f of ordinate) {
+        if (capacita >= obiettivo) { nonUsate.push(f); continue; }
+        const [areaTest] = areeDaFalde([f]);
+        const cap = layoutDiArea(areaTest, centro, modulo).capacita;
+        if (cap <= 0) { nonUsate.push(f); continue; }
+        usate.push(f);
+        capacita += cap;
+      }
+      if (!usate.length) {
+        setAutoMsg({ tipo: "warn", testo: "Nelle falde trovate non entra nessun modulo: controlla le misure del modulo e le distanze dai bordi, oppure disegna le aree a mano." });
+        return;
+      }
+      const nuove = areeDaFalde(usate);
+      aggiornaPosa({ aree: [...manuali, ...nuove], ripartizione: "sequenziale" });
+      setSelezionata(nuove[0]?.id || null);
+      setCandNascosti({ falde: ordinate, usate: usate.map((f) => f.id) });
+      const nOst = usate.reduce((t, f) => t + f.ostacoli.length, 0);
+      const nord = nonUsate.filter((f) => f.tipo === "falda" && distanzaDalSud(f) > 112).length;
+      const esp = [...new Set(usate.map((f) => etichettaEsposizione(f)))].join(", ");
+      const finale = capacita >= obiettivo
+        ? `Il numero di moduli richiesto (${richiestiTaglia}) entra nelle falde usate`
+        : massimo
+        ? `Posizionati ${capacita} moduli, il massimo che entra`
+        : `Nel perimetro entrano al massimo ${capacita} moduli su ${richiestiTaglia} richiesti`;
+      setAutoMsg({
+        tipo: "ok",
+        testo: `Usate ${nuove.length} ${nuove.length === 1 ? "falda" : "falde"} (${esp}) con ${nOst} ${nOst === 1 ? "ostacolo" : "ostacoli"}. ${finale}. ${nonUsate.length ? `Non usate: ${nonUsate.length}${nord ? ` (di cui ${nord} a Nord)` : ""} — si usano solo se servono. ` : ""}Controlla sulla mappa e correggi a mano se serve.`,
+      });
+    } catch (e) {
+      setAutoMsg({ tipo: "warn", testo: `Rilevamento automatico non riuscito: ${e.message}` });
+    } finally {
+      setLavoro("");
+    }
+  }
+
+  // riapre l'elenco delle falde dell'ultimo rilevamento (usate già spuntate) per aggiungerne o toglierne
+  function rivediFalde() {
+    if (!candNascosti) return;
+    setCandidati(candNascosti.falde);
+    setSelCand(candNascosti.usate);
+    setAutoMsg({ tipo: "ok", testo: "Spunta le falde da usare (anche quelle a Nord) e conferma: i moduli verranno disposti di nuovo." });
+  }
+
   function usaFaldeScelte() {
     const scelte = candidati.filter((f) => selCand.includes(f.id));
     if (!scelte.length) {
@@ -491,14 +673,11 @@ export default function RoofPlanner({
       return;
     }
     const ordinate = ordinaPerSud(scelte);
-    const aree0 = areeDaSegmentazione({ falde: ordinate }, centro, localeToLngLat, POSA_DEFAULT, nuovoId).map((a, i) => ({
-      ...a,
-      nome: `Falda ${i + 1} · ${etichettaEsposizione(ordinate[i])}`,
-      orient: Math.max(-180, Math.min(180, a.orient)),
-    }));
+    const aree0 = areeDaFalde(ordinate);
     const manuali = aree.filter((a) => !a.auto);
-    aggiornaPosa({ aree: [...manuali, ...aree0] });
+    aggiornaPosa({ aree: [...manuali, ...aree0], ripartizione: "sequenziale" });
     setSelezionata(aree0[0]?.id || null);
+    setCandNascosti({ falde: candidati, usate: scelte.map((f) => f.id) });
     const nOst = ordinate.reduce((t, f) => t + f.ostacoli.length, 0);
     setCandidati([]);
     setSelCand([]);
@@ -620,7 +799,7 @@ export default function RoofPlanner({
     const piano = tipo === "piano";
     const area = {
       id: nuovoId(),
-      nome: `Area ${aree.length + 1}`,
+      nome: prossimoNome(aree.map((x) => x.nome), "Area"),
       tipo,
       ring: daConfigurare.ring,
       ostacoli: [],
@@ -697,7 +876,7 @@ export default function RoofPlanner({
       ny = -ny;
     }
     const proj = loc.map((p) => p.x * nx + p.y * ny);
-    const passo = Math.max(...proj) - Math.min(...proj) + 1; // larghezza + 1 m di distanza minima
+    const passo = Math.max(...proj) - Math.min(...proj) + distanzaCopiaM; // larghezza + distanza (default 1 m)
     const sp = (q) => {
       const p = lngLatToLocale(centro, q);
       return localeToLngLat(centro, { x: p.x + nx * passo, y: p.y + ny * passo });
@@ -705,7 +884,7 @@ export default function RoofPlanner({
     const copia = {
       ...a,
       id: nuovoId(),
-      nome: `${a.nome.replace(/ \(copia( \d+)?\)$/, "")} (copia)`,
+      nome: nomeDistinto(a.nome, aree.map((x) => x.nome)),
       ring: a.ring.map(sp),
       ostacoli: (a.ostacoli || []).map((o) => o.map(sp)),
       auto: false, // una copia è una scelta dell'utente: non viene sostituita da un nuovo rilevamento
@@ -725,6 +904,7 @@ export default function RoofPlanner({
     setConfermaCancella(false);
     setCandidati([]);
     setSelCand([]);
+    setCandNascosti(null);
     setAutoMsg(null);
   }
 
@@ -793,6 +973,7 @@ export default function RoofPlanner({
           altezzaM,
           aree: areeScena,
           pannelli,
+          modulo: { l: modulo.lunghezzaM, w: modulo.larghezzaM },
           rilievo: ril,
         });
         return;
@@ -812,6 +993,7 @@ export default function RoofPlanner({
         altezzaM,
         aree: areeScena.map((a) => ({ ...a, piano: null })),
         pannelli,
+        modulo: { l: modulo.lunghezzaM, w: modulo.larghezzaM },
       });
       if (senzaRilievo) setAutoMsg({ tipo: "warn", testo: "Rilievo Google non disponibile per questo indirizzo: la vista 3D mostra solo le aree disegnate (quote stimate dall'altezza indicata), non l'intero edificio." });
     } catch (e) {
@@ -832,14 +1014,17 @@ export default function RoofPlanner({
       const v1 = ref3d.current.cattura("sud_est", 1100, 688);
       const v2 = ref3d.current.cattura("sud_ovest", 1100, 688);
       const riepilogo = {
-        richiesti: Math.round(pannelliRichiesti),
+        richiesti: richiesti,
         posizionati: calcolo.dist.posizionati,
         capacita: calcolo.dist.capacitaTotale,
         ripartizione: aree.length > 1 ? ripartizione : null,
         rilievoReale: Boolean(rilievo),
         kwp: calcolo.dist.kwp,
         kwpMassimi: calcolo.dist.kwpMassimi,
-        modulo: MODULO.nome,
+        modulo: modulo.nome,
+        moduloWp: modulo.wp,
+        moduloDim: [Math.round(modulo.lunghezzaM * 1000), Math.round(modulo.larghezzaM * 1000)],
+        massimo,
         aree: aree.map((a, i) => ({
           nome: a.nome,
           tipo: a.tipo,
@@ -853,7 +1038,7 @@ export default function RoofPlanner({
         })),
       };
       aggiornaPosa({
-        immagini: { pianta, v3d1: v1, v3d2: v2, firma: firmaLayout(aree, pannelliRichiesti, ripartizione), riepilogo, data: new Date().toISOString() },
+        immagini: { pianta, v3d1: v1, v3d2: v2, firma: firmaLayout(aree, richiesti, ripartizione, moduloDefault ? null : modulo), riepilogo, data: new Date().toISOString() },
       });
     } catch (e) {
       setErrore(`Immagini non salvate: ${e.message}`);
@@ -878,7 +1063,7 @@ export default function RoofPlanner({
   const selLayout = selIdx >= 0 ? calcolo.layouts[selIdx] : null;
   const { dist } = calcolo;
   const immagini = posa?.immagini || null;
-  const immaginiAttuali = immagini && immagini.firma === firmaLayout(aree, pannelliRichiesti, ripartizione);
+  const immaginiAttuali = immagini && immagini.firma === firmaLayout(aree, richiesti, ripartizione, moduloDefault ? null : modulo);
   const mancanti = dist.mancanti;
 
   if (!MAPBOX_TOKEN) {
@@ -897,7 +1082,7 @@ export default function RoofPlanner({
         <div>
           <div className="posa-num">
             {dist.posizionati}
-            <span> / {Math.round(pannelliRichiesti)}</span>
+            <span> / {richiesti}</span>
           </div>
           <div className="posa-lab">moduli posizionati / richiesti ({dist.kwp} kWp)</div>
         </div>
@@ -955,6 +1140,65 @@ export default function RoofPlanner({
 
       {errore && <div className="error-box" style={{ marginTop: 8 }}>{errore}</div>}
 
+      <div className="posa-auto" style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", margin: "10px 0" }}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("perimetro")} disabled={Boolean(lavoro) || Boolean(modo)} title="Disegna il contorno dell'area disponibile: fuori da lì il rilievo viene ignorato (edifici vicini esclusi)">
+          ① {perimetro ? "Ridisegna" : "Disegna"} area disponibile
+        </button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={rilevaEDisponi} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title={perimetro ? "Riconosce falde e ostacoli nell'area e dispone il massimo dei moduli, dando la precedenza a Sud, Sud-Est e Sud-Ovest" : "Disegna prima l'area disponibile"}>
+          ② ✨ Rileva falde e ostacoli e disponi i moduli
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={rilevaFalde} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title="Mostra le falde trovate e le scegli tu">
+          Scegli le falde a mano
+        </button>
+        {candNascosti && candidati.length === 0 && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={rivediFalde} disabled={Boolean(lavoro) || Boolean(modo)}>
+            Rivedi le falde rilevate ({candNascosti.falde.length - candNascosti.usate.length} non usate)
+          </button>
+        )}
+        {perimetro && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPerimetro(null); setCandidati([]); setSelCand([]); setCandNascosti(null); setAutoMsg(null); }}>
+            Cancella area disponibile
+          </button>
+        )}
+      </div>
+
+      <div className="posa-modulo" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", margin: "10px 0", padding: 10, border: "1px solid var(--border)", borderRadius: 10 }}>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Modulo fotovoltaico</label>
+          <select
+            value={presetModulo}
+            onChange={(e) => {
+              const pr = PRESET_MODULI.find((x) => x.id === e.target.value);
+              if (pr) aggiornaPosa({ modulo: normalizzaModulo(pr) });
+            }}
+          >
+            {PRESET_MODULI.map((pr) => (
+              <option key={pr.id} value={pr.id}>{pr.nome} · {Math.round(pr.lunghezzaM * 1000)} × {Math.round(pr.larghezzaM * 1000)} mm</option>
+            ))}
+            <option value="custom">Personalizzato</option>
+          </select>
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Potenza (Wp)</label>
+          <NumeroConferma value={modulo.wp} min={50} max={1000} step={5} width={80} onCommit={(v) => impostaModulo({ wp: v })} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Lato lungo (mm)</label>
+          <NumeroConferma value={Math.round(modulo.lunghezzaM * 1000)} min={500} max={3500} step={1} width={90} onCommit={(v) => impostaModulo({ lunghezzaM: v / 1000 })} />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label>Lato corto (mm)</label>
+          <NumeroConferma value={Math.round(modulo.larghezzaM * 1000)} min={300} max={2000} step={1} width={90} onCommit={(v) => impostaModulo({ larghezzaM: v / 1000 })} />
+        </div>
+        <label className="posa-check" style={{ margin: 0 }} title="Se attivo, la taglia dell'impianto non limita i moduli: se ne dispongono quanti ne entrano nelle aree">
+          <input type="checkbox" checked={massimo} onChange={(e) => aggiornaPosa({ massimo: e.target.checked })} />
+          Posiziona il massimo possibile (ignora la taglia richiesta)
+        </label>
+        {!moduloDefault && !massimo && (
+          <span className="hint" style={{ margin: 0 }}>Con questo modulo servono {richiestiTaglia} moduli per {Number(kwpRichiesti) || 0} kWp.</span>
+        )}
+      </div>
+
       <div className="posa-rilievo">
         {!rilievo ? (
           <>
@@ -962,7 +1206,7 @@ export default function RoofPlanner({
               ⛰ Carica rilievo reale (foto e quote Google)
             </button>
             <span className="hint" style={{ margin: 0 }}>
-              Per una vista 3D con il rilievo vero di tetti, alberi ed edifici vicini. Carica il rilievo <em>prima</em> di disegnare le aree: ti disegni sulla stessa foto.
+              Il rilievo di tetti, alberi ed edifici vicini viene scaricato in automatico quando serve (rilevamento falde, vista 3D).
             </span>
           </>
         ) : (
@@ -974,18 +1218,7 @@ export default function RoofPlanner({
               <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
               Mostra la foto Google sulla mappa
             </label>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("perimetro")} disabled={Boolean(lavoro) || Boolean(modo)} title="Disegna il contorno della zona da analizzare: fuori da lì il rilievo viene ignorato (edifici vicini esclusi)">
-              ① {perimetro ? "Ridisegna" : "Disegna"} perimetro da analizzare
-            </button>
-            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaFalde} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title={perimetro ? "Riconosce falde e ostacoli solo dentro il perimetro" : "Disegna prima il perimetro"}>
-              ② ✨ Rileva falde e ostacoli nel perimetro
-            </button>
-            {perimetro && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPerimetro(null); setCandidati([]); setSelCand([]); setAutoMsg(null); }}>
-                Cancella perimetro
-              </button>
-            )}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setCandidati([]); setSelCand([]); setPerimetro(null); }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setCandidati([]); setSelCand([]); setCandNascosti(null); }}>
               Rimuovi rilievo
             </button>
             {!rilievo.georefEsatta && (
@@ -1002,7 +1235,7 @@ export default function RoofPlanner({
       )}
       {candidati.length > 0 && (
         <div className="posa-cand" style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>③ Conferma le falde da usare</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Falde rilevate: scegli quelle da usare</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand(candidati.filter((f) => distanzaDalSud(f) <= 67).map((f) => f.id))}>
               Solo quelle rivolte a Sud
@@ -1026,16 +1259,16 @@ export default function RoofPlanner({
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={usaFaldeScelte} disabled={!selCand.length}>
-              ④ Usa le falde scelte ({selCand.length})
+              Usa le falde scelte ({selCand.length})
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCandidati([]); setSelCand([]); setAutoMsg(null); }}>Annulla</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCandidati([]); setSelCand([]); setAutoMsg(null); }}>Chiudi</button>
           </div>
         </div>
       )}
 
       {aree.length > 1 && (
         <div className="posa-ripartizione">
-          <div className="posa-ripartizione-titolo">Come distribuire i {Math.round(pannelliRichiesti)} moduli tra le {aree.length} aree</div>
+          <div className="posa-ripartizione-titolo">Come distribuire i {richiesti} moduli tra le {aree.length} aree</div>
           <label className={`posa-radio ${ripartizione === "sequenziale" ? "on" : ""}`}>
             <input type="radio" name="ripartizione" checked={ripartizione === "sequenziale"} onChange={() => aggiornaPosa({ ripartizione: "sequenziale" })} />
             <span>
@@ -1122,6 +1355,10 @@ export default function RoofPlanner({
             <span className="hint" style={{ margin: 0 }}>
               {spostaAttivo ? "Trascina l'area sulla mappa, oppure usa le frecce (0,5 m a ogni click)." : "Attivalo per trascinare l'area sulla mappa."}
             </span>
+            <span className="hint" style={{ margin: 0, display: "inline-flex", gap: 4, alignItems: "center" }}>
+              Distanza della copia (m)
+              <NumeroConferma value={distanzaCopiaM} min={0} max={30} step={0.1} width={64} onCommit={setDistanzaCopiaM} />
+            </span>
             <span style={{ display: "inline-flex", gap: 4 }}>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, -0.5, 0)} aria-label="Sposta a Ovest">◀</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, 0, 0.5)} aria-label="Sposta a Nord">▲</button>
@@ -1179,6 +1416,12 @@ export default function RoofPlanner({
                 <input type="checkbox" checked={sel.allinea !== false} onChange={(e) => modificaArea(sel.id, { allinea: e.target.checked })} />
                 Allinea i moduli ai lati dell&apos;edificio
               </label>
+              {sel.tipo === "falda" && (
+                <label className="posa-check" title="Negli spazi che la griglia lascia liberi (bordi, attorno agli ostacoli) si posano moduli ruotati di 90° per contenerne il più possibile">
+                  <input type="checkbox" checked={sel.riempiResti !== false} onChange={(e) => modificaArea(sel.id, { riempiResti: e.target.checked })} />
+                  Riempi gli spazi residui con moduli ruotati (più moduli)
+                </label>
+              )}
             </div>
             <div>
               <div className="field" style={{ marginBottom: 4 }}>
