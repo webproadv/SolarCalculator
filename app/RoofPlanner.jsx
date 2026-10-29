@@ -36,8 +36,12 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 const LAYER_OVERLAY = [
   "aree-fill", "aree-line", "ostacoli-fill", "ostacoli-line",
-  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "cand-fill", "cand-line", "cand-num", "bozza-line", "bozza-pts",
+  "pann-extra-fill", "pann-usati-fill", "pann-usati-line", "perimetro-fill", "perimetro-line", "cand-fill", "cand-line", "cand-num", "bozza-line", "bozza-pts",
 ];
+
+// un colore per area: lo stesso sulla mappa, nell'elenco e nella vista 3D
+export const COLORI_AREE = ["#f59e0b", "#22c55e", "#3b82f6", "#ec4899", "#a855f7", "#14b8a6", "#ef4444", "#84cc16"];
+const coloreArea = (i) => COLORI_AREE[i % COLORI_AREE.length];
 
 const vuoto = { type: "FeatureCollection", features: [] };
 
@@ -112,6 +116,12 @@ export default function RoofPlanner({
   const candRef = useRef([]);
   useEffect(() => { candRef.current = candidati; }, [candidati]);
   const [selezionata, setSelezionata] = useState(null);
+  // perimetro disegnato dall'utente: il rilevamento automatico lavora solo là dentro
+  const [perimetro, setPerimetro] = useState(null); // anello lng/lat
+  const [confermaCancella, setConfermaCancella] = useState(false);
+  const [spostaAttivo, setSpostaAttivo] = useState(false); // trascinamento dell'area selezionata
+  const [stile3d, setStile3d] = useState("colori"); // "colori" | "foto"
+  const [aree3d, setAree3d] = useState(true);
   const [scena3d, setScena3d] = useState(null);
   const [lavoro, setLavoro] = useState("");
   const [rilievo, setRilievo] = useState(null);
@@ -125,12 +135,17 @@ export default function RoofPlanner({
   const bozzaRef = useRef([]);
   const areeRef = useRef([]);
   const selezRef = useRef(null);
+  const spostaRef = useRef(false);
+  const dragRef = useRef(null);
   const posaRef = useRef(null);
   useEffect(() => { posaRef.current = posa; }, [posa]);
   useEffect(() => { modoRef.current = modo; }, [modo]);
   useEffect(() => { bozzaRef.current = bozza; }, [bozza]);
   useEffect(() => { areeRef.current = aree; }, [aree]);
   useEffect(() => { selezRef.current = selezionata; }, [selezionata]);
+  useEffect(() => { spostaRef.current = spostaAttivo; }, [spostaAttivo]);
+  // fuori dalla selezione non si può spostare nulla
+  useEffect(() => { if (!selezionata) setSpostaAttivo(false); }, [selezionata]);
 
   const aggiornaPosa = useCallback(
     (patch) => onPosaChange({ ...(posa || {}), aree, altezzaM, immagini: posa?.immagini || null, ...patch }),
@@ -174,9 +189,9 @@ export default function RoofPlanner({
       ring.push(ring[0]);
       return [ring];
     };
-    const areeF = aree.map((a) => ({
+    const areeF = aree.map((a, i) => ({
       type: "Feature",
-      properties: { id: a.id, sel: a.id === selezionata ? 1 : 0 },
+      properties: { id: a.id, sel: a.id === selezionata ? 1 : 0, c: coloreArea(i) },
       geometry: { type: "Polygon", coordinates: pol(a.ring) },
     }));
     const ostF = aree.flatMap((a) =>
@@ -217,6 +232,13 @@ export default function RoofPlanner({
     return { poli: { type: "FeatureCollection", features: poli }, num: { type: "FeatureCollection", features: num } };
   }, [candidati, selCand]);
 
+  const geoPerimetro = useMemo(() => {
+    if (!perimetro || perimetro.length < 3) return vuoto;
+    const ring = perimetro.map((q) => q.slice());
+    ring.push(ring[0]);
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }] };
+  }, [perimetro]);
+
   const geoBozza = useMemo(() => {
     const feats = [];
     if (bozza.length >= 2) feats.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: bozza } });
@@ -255,11 +277,16 @@ export default function RoofPlanner({
 
         map.on("load", () => {
           const src = (id) => map.addSource(id, { type: "geojson", data: vuoto });
-          ["aree", "ostacoli", "pann-usati", "pann-extra", "cand", "cand-num", "bozza-linea", "bozza-punti"].forEach(src);
-          map.addLayer({ id: "aree-fill", type: "fill", source: "aree", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.14 } });
+          ["aree", "ostacoli", "pann-usati", "pann-extra", "perimetro", "cand", "cand-num", "bozza-linea", "bozza-punti"].forEach(src);
+          map.addLayer({ id: "perimetro-fill", type: "fill", source: "perimetro", paint: { "fill-color": "#38bdf8", "fill-opacity": 0.1 } });
+          map.addLayer({ id: "perimetro-line", type: "line", source: "perimetro", paint: { "line-color": "#38bdf8", "line-width": 2.5, "line-dasharray": [3, 2] } });
+          map.addLayer({
+            id: "aree-fill", type: "fill", source: "aree",
+            paint: { "fill-color": ["coalesce", ["get", "c"], "#f59e0b"], "fill-opacity": ["case", ["==", ["get", "sel"], 1], 0.3, 0.18] },
+          });
           map.addLayer({
             id: "aree-line", type: "line", source: "aree",
-            paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#ffffff", "#fbbf24"], "line-width": ["case", ["==", ["get", "sel"], 1], 3, 2] },
+            paint: { "line-color": ["case", ["==", ["get", "sel"], 1], "#ffffff", ["coalesce", ["get", "c"], "#fbbf24"]], "line-width": ["case", ["==", ["get", "sel"], 1], 3.5, 2.5] },
           });
           map.addLayer({ id: "ostacoli-fill", type: "fill", source: "ostacoli", paint: { "fill-color": "#ef4444", "fill-opacity": 0.45 } });
           map.addLayer({ id: "ostacoli-line", type: "line", source: "ostacoli", paint: { "line-color": "#fecaca", "line-width": 1.5 } });
@@ -311,6 +338,46 @@ export default function RoofPlanner({
           }
           setBozza([...b, pt]);
         });
+        // trascinamento dell'area selezionata (per posizionare una falda duplicata)
+        const inizioTrascina = (e) => {
+          if (!spostaRef.current || modoRef.current) return;
+          const area = areeRef.current.find((a) => a.id === selezRef.current);
+          if (!area || !e.lngLat) return;
+          const loc = lngLatToLocale(centro, [e.lngLat.lng, e.lngLat.lat]);
+          const ring = area.ring.map((q) => lngLatToLocale(centro, q));
+          if (!puntoInPoligono(loc, ring)) return;
+          e.preventDefault();
+          map.dragPan.disable();
+          dragRef.current = { id: area.id, start: loc, mosso: false };
+        };
+        const muoviTrascina = (e) => {
+          const d = dragRef.current;
+          if (!d || !e.lngLat) return;
+          const loc = lngLatToLocale(centro, [e.lngLat.lng, e.lngLat.lat]);
+          d.dx = loc.x - d.start.x;
+          d.dy = loc.y - d.start.y;
+          d.mosso = true;
+          if (!d.raf) {
+            d.raf = requestAnimationFrame(() => {
+              d.raf = 0;
+              if (dragRef.current === d) traslaAreaRef.current(d.id, d.dx, d.dy, d);
+            });
+          }
+        };
+        const fineTrascina = () => {
+          const d = dragRef.current;
+          if (!d) return;
+          if (d.raf) cancelAnimationFrame(d.raf);
+          if (d.mosso) traslaAreaRef.current(d.id, d.dx, d.dy, d);
+          dragRef.current = null;
+          map.dragPan.enable();
+        };
+        map.on("mousedown", inizioTrascina);
+        map.on("touchstart", inizioTrascina);
+        map.on("mousemove", muoviTrascina);
+        map.on("touchmove", muoviTrascina);
+        map.on("mouseup", fineTrascina);
+        map.on("touchend", fineTrascina);
         map.on("dblclick", (e) => {
           if (!modoRef.current) return;
           e.preventDefault();
@@ -348,16 +415,21 @@ export default function RoofPlanner({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapPronta) return;
+    map.getSource("perimetro")?.setData(geoPerimetro);
+  }, [geoPerimetro, mapPronta]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapPronta) return;
     map.getSource("bozza-linea")?.setData(geoBozza.linea);
     map.getSource("bozza-punti")?.setData(geoBozza.punti);
   }, [geoBozza, mapPronta]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapPronta) return;
-    map.getCanvas().style.cursor = modo ? "crosshair" : "";
+    map.getCanvas().style.cursor = modo ? "crosshair" : spostaAttivo ? "move" : "";
     if (modo) map.doubleClickZoom.disable();
     else map.doubleClickZoom.enable();
-  }, [modo, mapPronta]);
+  }, [modo, spostaAttivo, mapPronta]);
 
   /* ------------------------------------------------------ rilievo reale */
 
@@ -367,24 +439,31 @@ export default function RoofPlanner({
     setScena3d(null);
     setCandidati([]);
     setSelCand([]);
+    setPerimetro(null);
     setAutoMsg(null);
   }, [centro.lat, centro.lng]);
 
-  // Rilevamento automatico in due tempi:
-  //  1. "Rileva falde": il rilievo (DSM) viene scomposto in falde, anche quelle degli
-  //     edifici vicini; compaiono sulla mappa numerate, da scegliere con un click.
-  //  2. "Usa le falde scelte": solo quelle selezionate diventano aree di posa, con i
-  //     loro ostacoli, ordinate dando la precedenza a quelle rivolte a Sud (i moduli
-  //     riempiono le aree in ordine). Le aree disegnate a mano restano intatte.
+  // Rilevamento automatico in tre tempi:
+  //  1. l'utente disegna il PERIMETRO della zona da analizzare (l'edificio dell'azienda):
+  //     fuori da lì il rilievo non viene nemmeno guardato (edifici vicini esclusi);
+  //  2. "Rileva falde": dentro il perimetro il rilievo (DSM) viene scomposto in falde e
+  //     ostacoli; compaiono sulla mappa numerate, ordinate dalla più rivolta a Sud;
+  //  3. "Usa le falde scelte": quelle spuntate diventano aree di posa (i moduli
+  //     riempiono prima le più rivolte a Sud). Le aree disegnate a mano restano intatte.
   function rilevaFalde() {
     if (!rilievo) return;
     setAutoMsg(null);
+    if (!perimetro || perimetro.length < 3) {
+      setAutoMsg({ tipo: "warn", testo: "Prima disegna sulla mappa il perimetro della zona da analizzare (pulsante «① Disegna perimetro»)." });
+      return;
+    }
     try {
-      const seg = segmentaTetto(rilievo, { tutti: true });
+      const poligono = perimetro.map((q) => lngLatToLocale(centro, q));
+      const seg = segmentaTetto(rilievo, { poligono });
       if (!seg.falde.length) {
         setCandidati([]);
         setSelCand([]);
-        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta: disegna le aree a mano." });
+        setAutoMsg({ tipo: "warn", testo: seg.avvisi[0] || "Nessuna falda riconosciuta nel perimetro: ridisegnalo o disegna le aree a mano." });
         return;
       }
       const ordinate = ordinaPerSud(seg.falde).map((f) => ({
@@ -393,11 +472,12 @@ export default function RoofPlanner({
         ostRing: f.ostacoli.map((o) => o.map((q) => localeToLngLat(centro, q))),
       }));
       setCandidati(ordinate);
-      // preselezione: la falda più vicina al punto indicato (il sito) e le sue vicine di pari esposizione sono una scelta dell'utente: parte vuota
-      setSelCand([]);
+      // tutto ciò che sta nel perimetro è già "dell'azienda": parte tutto spuntato, si tolgono a mano le falde che non servono
+      setSelCand(ordinate.map((f) => f.id));
+      const nOst = ordinate.reduce((t, f) => t + f.ostacoli.length, 0);
       setAutoMsg({
         tipo: seg.avvisi.length ? "warn" : "ok",
-        testo: `Trovate ${ordinate.length} ${ordinate.length === 1 ? "falda" : "falde"} (ordinate dalla più rivolta a Sud). Clicca sulla mappa, o spunta nell'elenco, solo quelle dell'azienda.${seg.avvisi.length ? " " + seg.avvisi.join(" ") : ""}`,
+        testo: `Nel perimetro: ${ordinate.length} ${ordinate.length === 1 ? "falda" : "falde"} e ${nOst} ${nOst === 1 ? "ostacolo" : "ostacoli"} (ordinate dalla più rivolta a Sud). Togli la spunta a quelle che non servono, poi conferma.${seg.avvisi.length ? " " + seg.avvisi.join(" ") : ""}`,
       });
     } catch (e) {
       setAutoMsg({ tipo: "warn", testo: `Rilevamento automatico non riuscito: ${e.message}` });
@@ -407,7 +487,7 @@ export default function RoofPlanner({
   function usaFaldeScelte() {
     const scelte = candidati.filter((f) => selCand.includes(f.id));
     if (!scelte.length) {
-      setAutoMsg({ tipo: "warn", testo: "Seleziona almeno una falda dell'azienda (click sulla mappa o spunta nell'elenco)." });
+      setAutoMsg({ tipo: "warn", testo: "Seleziona almeno una falda (click sulla mappa o spunta nell'elenco)." });
       return;
     }
     const ordinate = ordinaPerSud(scelte);
@@ -439,11 +519,14 @@ export default function RoofPlanner({
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
-      setRilievo(decodificaRilievo(j));
+      const ril = decodificaRilievo(j);
+      setRilievo(ril);
       setFotoGoogle(true);
       setScena3d(null);
+      return ril;
     } catch (e) {
       setRilievoErr(e.message);
+      return null;
     } finally {
       setLavoro("");
     }
@@ -490,6 +573,15 @@ export default function RoofPlanner({
       return;
     }
     setErrore("");
+    if (modoRef.current === "perimetro") {
+      setPerimetro(pulita);
+      setCandidati([]);
+      setSelCand([]);
+      setAutoMsg(null);
+      setBozza([]);
+      setModo(null);
+      return;
+    }
     if (modoRef.current === "ostacolo") {
       const loc = lngLatToLocale(centro, pulita[0]);
       let target = areeRef.current.find((a) => a.id === selezRef.current);
@@ -559,6 +651,83 @@ export default function RoofPlanner({
     [copia[i], copia[j]] = [copia[j], copia[i]];
     aggiornaPosa({ aree: copia });
   }
+  // sposta un'area (e i suoi ostacoli) di dx, dy metri (x = Est, y = Nord)
+  const traslaAreaRef = useRef(() => {});
+  traslaAreaRef.current = (id, dx, dy, d) => {
+    const a = areeRef.current.find((x) => x.id === id);
+    if (!a) return;
+    let orig = d?.orig;
+    if (!orig) {
+      orig = { ring: a.ring.map((q) => lngLatToLocale(centro, q)), ost: (a.ostacoli || []).map((o) => o.map((q) => lngLatToLocale(centro, q))) };
+      if (d) d.orig = orig;
+    }
+    const sp = (p) => localeToLngLat(centro, { x: p.x + dx, y: p.y + dy });
+    const nuove = areeRef.current.map((x) => (x.id === id ? { ...x, ring: orig.ring.map(sp), ostacoli: orig.ost.map((o) => o.map(sp)) } : x));
+    onPosaChange({ ...(posaRef.current || {}), aree: nuove, altezzaM, immagini: posaRef.current?.immagini || null });
+  };
+  function nudgeArea(id, dx, dy) {
+    traslaAreaRef.current(id, dx, dy, null);
+  }
+
+  // Duplica un'area: stessa forma, orientamento, pendenza e ostacoli, traslata di fianco in
+  // direzione perpendicolare al suo lato più lungo, di tutta la sua larghezza + 1 m di distanza,
+  // così le due aree sono parallele e non si toccano. Poi si trascina dove serve.
+  function duplicaArea(id) {
+    const a = aree.find((x) => x.id === id);
+    if (!a) return;
+    const loc = a.ring.map((q) => lngLatToLocale(centro, q));
+    let lung = 0;
+    let ux = 1;
+    let uy = 0;
+    for (let i = 0; i < loc.length; i++) {
+      const p0 = loc[i];
+      const p1 = loc[(i + 1) % loc.length];
+      const l = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      if (l > lung) {
+        lung = l;
+        ux = (p1.x - p0.x) / l;
+        uy = (p1.y - p0.y) / l;
+      }
+    }
+    let nx = -uy;
+    let ny = ux;
+    // verso: preferibilmente a Nord (le file successive), altrimenti a Est
+    if (ny < -1e-9 || (Math.abs(ny) <= 1e-9 && nx < 0)) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const proj = loc.map((p) => p.x * nx + p.y * ny);
+    const passo = Math.max(...proj) - Math.min(...proj) + 1; // larghezza + 1 m di distanza minima
+    const sp = (q) => {
+      const p = lngLatToLocale(centro, q);
+      return localeToLngLat(centro, { x: p.x + nx * passo, y: p.y + ny * passo });
+    };
+    const copia = {
+      ...a,
+      id: nuovoId(),
+      nome: `${a.nome.replace(/ \(copia( \d+)?\)$/, "")} (copia)`,
+      ring: a.ring.map(sp),
+      ostacoli: (a.ostacoli || []).map((o) => o.map(sp)),
+      auto: false, // una copia è una scelta dell'utente: non viene sostituita da un nuovo rilevamento
+    };
+    const i = aree.findIndex((x) => x.id === id);
+    const nuove = aree.slice();
+    nuove.splice(i + 1, 0, copia);
+    aggiornaPosa({ aree: nuove });
+    setSelezionata(copia.id);
+    setSpostaAttivo(true);
+  }
+
+  function cancellaTutteLeAree() {
+    aggiornaPosa({ aree: [] });
+    setSelezionata(null);
+    setSpostaAttivo(false);
+    setConfermaCancella(false);
+    setCandidati([]);
+    setSelCand([]);
+    setAutoMsg(null);
+  }
+
   function rimuoviOstacoli(id) {
     modificaArea(id, { ostacoli: [] });
   }
@@ -586,9 +755,18 @@ export default function RoofPlanner({
   async function generaVista3d() {
     const map = mapRef.current;
     if (!map || !calcolo.dist.posizionati) return;
-    setLavoro("Preparo la vista 3D…");
     setErrore("");
     try {
+      // Per riprodurre tutto l'edificio serve il rilievo (quote reali): se manca lo scarico adesso.
+      let ril = rilievo;
+      let senzaRilievo = false;
+      if (!ril) {
+        ril = await caricaRilievo();
+        senzaRilievo = !ril;
+      }
+      setLavoro("Preparo la vista 3D…");
+      const pianiUsati = ril ? (ril === rilievo ? piani : calcolo.layouts.map((l) => stimaPiano(ril, l.poligono, l.ostacoliLocali))) : [];
+
       const pannelli = [];
       calcolo.layouts.forEach((l, i) => {
         l.pannelli.slice(0, calcolo.dist.usati[i]).forEach((p) =>
@@ -596,24 +774,26 @@ export default function RoofPlanner({
         );
       });
       const areeScena = aree.map((a, i) => ({
+        nome: a.nome,
+        colore: coloreArea(i),
         tipo: a.tipo,
         poligono: calcolo.layouts[i].poligono,
         ostacoli: calcolo.layouts[i].ostacoliLocali,
         pendenzaDeg: a.tipo === "falda" ? a.tilt : 0,
         azimutDiscesa: calcolo.layouts[i].azimutEffettivo,
-        piano: piani[i] || null,
+        piano: pianiUsati[i] || null,
       }));
 
-      if (rilievo) {
+      if (ril) {
         // rilievo reale: foto e quote Google, già sulla stessa griglia locale
-        const E = rilievo.estensioneM;
+        const E = ril.estensioneM;
         setScena3d({
           bounds: { xmin: -E, xmax: E, ymin: -E, ymax: E },
-          texture: rilievo.fotoDataUrl,
+          texture: ril.fotoDataUrl,
           altezzaM,
           aree: areeScena,
           pannelli,
-          rilievo,
+          rilievo: ril,
         });
         return;
       }
@@ -633,6 +813,7 @@ export default function RoofPlanner({
         aree: areeScena.map((a) => ({ ...a, piano: null })),
         pannelli,
       });
+      if (senzaRilievo) setAutoMsg({ tipo: "warn", testo: "Rilievo Google non disponibile per questo indirizzo: la vista 3D mostra solo le aree disegnate (quote stimate dall'altezza indicata), non l'intero edificio." });
     } catch (e) {
       setErrore(`Vista 3D non generata: ${e.message}`);
     } finally {
@@ -747,11 +928,23 @@ export default function RoofPlanner({
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("ostacolo")} disabled={!aree.length}>
               ＋ Ostacolo (lucernario, camino…)
             </button>
+            {aree.length > 0 && !confermaCancella && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfermaCancella(true)} title="Elimina tutte le aree (e i loro ostacoli) inserite">
+                🗑 Cancella tutte le aree
+              </button>
+            )}
+            {aree.length > 0 && confermaCancella && (
+              <span className="posa-hint" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                Eliminare tutte le {aree.length} aree?
+                <button type="button" className="btn btn-primary btn-sm" onClick={cancellaTutteLeAree}>Sì, cancella tutto</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfermaCancella(false)}>No</button>
+              </span>
+            )}
           </>
         ) : (
           <>
             <span className="posa-hint">
-              {modo === "area" ? "Clicca gli angoli dell'area." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
+              {modo === "area" ? "Clicca gli angoli dell'area." : modo === "perimetro" ? "Clicca gli angoli del perimetro: racchiudi solo l'edificio da analizzare." : "Clicca gli angoli dell'ostacolo."} Chiudi con doppio click o cliccando sul primo punto.
             </span>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBozza((b) => b.slice(0, -1))} disabled={!bozza.length}>↶ Annulla ultimo punto</button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => chiudiBozzaRef.current()} disabled={bozza.length < 3}>Chiudi figura</button>
@@ -781,10 +974,18 @@ export default function RoofPlanner({
               <input type="checkbox" checked={fotoGoogle} onChange={(e) => setFotoGoogle(e.target.checked)} />
               Mostra la foto Google sulla mappa
             </label>
-            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaFalde} disabled={Boolean(lavoro) || Boolean(modo)} title="Scompone il rilievo in falde e ostacoli: poi scegli tu quelle dell'azienda">
-              ① ✨ Rileva falde dal rilievo
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => avviaDisegno("perimetro")} disabled={Boolean(lavoro) || Boolean(modo)} title="Disegna il contorno della zona da analizzare: fuori da lì il rilievo viene ignorato (edifici vicini esclusi)">
+              ① {perimetro ? "Ridisegna" : "Disegna"} perimetro da analizzare
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setCandidati([]); setSelCand([]); }}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={rilevaFalde} disabled={Boolean(lavoro) || Boolean(modo) || !perimetro} title={perimetro ? "Riconosce falde e ostacoli solo dentro il perimetro" : "Disegna prima il perimetro"}>
+              ② ✨ Rileva falde e ostacoli nel perimetro
+            </button>
+            {perimetro && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPerimetro(null); setCandidati([]); setSelCand([]); setAutoMsg(null); }}>
+                Cancella perimetro
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRilievo(null); setScena3d(null); setAutoMsg(null); setCandidati([]); setSelCand([]); setPerimetro(null); }}>
               Rimuovi rilievo
             </button>
             {!rilievo.georefEsatta && (
@@ -801,10 +1002,10 @@ export default function RoofPlanner({
       )}
       {candidati.length > 0 && (
         <div className="posa-cand" style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>② Scegli le falde dell&apos;azienda</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>③ Conferma le falde da usare</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand(candidati.filter((f) => distanzaDalSud(f) <= 67).map((f) => f.id))}>
-              Seleziona quelle rivolte a Sud
+              Solo quelle rivolte a Sud
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand(candidati.map((f) => f.id))}>Tutte</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelCand([])}>Nessuna</button>
@@ -825,7 +1026,7 @@ export default function RoofPlanner({
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={usaFaldeScelte} disabled={!selCand.length}>
-              ③ Usa le falde scelte ({selCand.length})
+              ④ Usa le falde scelte ({selCand.length})
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCandidati([]); setSelCand([]); setAutoMsg(null); }}>Annulla</button>
           </div>
@@ -870,6 +1071,7 @@ export default function RoofPlanner({
           <span><i style={{ background: "#93c5fd" }} /> capacità non usata</span>
           <span><i style={{ background: "#fbbf24" }} /> area</span>
           <span><i style={{ background: "#ef4444" }} /> ostacolo</span>
+          {perimetro && <span><i style={{ background: "#38bdf8" }} /> perimetro</span>}
         </div>
       </div>
 
@@ -882,6 +1084,7 @@ export default function RoofPlanner({
               className={`posa-area-chip ${a.id === selezionata ? "active" : ""}`}
               onClick={() => setSelezionata(a.id === selezionata ? null : a.id)}
             >
+              <i style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: coloreArea(i), marginRight: 6 }} />
               {aree.length > 1 && ripartizione === "sequenziale" ? `${i + 1}. ` : ""}<strong>{a.nome}</strong> · {a.tipo === "piano" ? "piano" : "falda"} · {dist.usati[i]}/{calcolo.layouts[i].capacita} moduli
             </button>
           ))}
@@ -907,7 +1110,24 @@ export default function RoofPlanner({
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => spostaArea(sel.id, 1)} disabled={selIdx === aree.length - 1} aria-label="Sposta dopo">▼</button>
               </div>
             )}
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => duplicaArea(sel.id)} title="Crea una copia identica, parallela e a 1 m di distanza, da trascinare dove serve (utile per disegnare stringhe uguali)">
+              ⧉ Duplica falda
+            </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => eliminaArea(sel.id)}>Elimina area</button>
+          </div>
+          <div className="posa-move" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", margin: "8px 0" }}>
+            <button type="button" className={`btn btn-sm ${spostaAttivo ? "btn-primary" : "btn-ghost"}`} onClick={() => setSpostaAttivo((v) => !v)} disabled={Boolean(modo)}>
+              ✥ {spostaAttivo ? "Spostamento attivo" : "Sposta area"}
+            </button>
+            <span className="hint" style={{ margin: 0 }}>
+              {spostaAttivo ? "Trascina l'area sulla mappa, oppure usa le frecce (0,5 m a ogni click)." : "Attivalo per trascinare l'area sulla mappa."}
+            </span>
+            <span style={{ display: "inline-flex", gap: 4 }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, -0.5, 0)} aria-label="Sposta a Ovest">◀</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, 0, 0.5)} aria-label="Sposta a Nord">▲</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, 0, -0.5)} aria-label="Sposta a Sud">▼</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => nudgeArea(sel.id, 0.5, 0)} aria-label="Sposta a Est">▶</button>
+            </span>
           </div>
 
           <div className="posa-edit-grid">
@@ -1026,7 +1246,7 @@ export default function RoofPlanner({
 
       <div className="posa-3d-head">
         <div className="field" style={{ margin: 0 }}>
-          <label>{rilievo ? "Altezza del tetto (m) — non usata con il rilievo reale" : "Altezza del tetto/gronda (m) — solo per la vista 3D"}</label>
+          <label>{rilievo ? "Altezza del tetto (m) — non usata con il rilievo reale" : "Altezza del tetto/gronda (m) — solo se manca il rilievo"}</label>
           <input
             type="number" min="2" max="40" step="0.5" value={altezzaM} disabled={Boolean(rilievo)}
             onChange={(e) => aggiornaPosa({ altezzaM: Math.max(2, Math.min(40, Number(e.target.value) || 8)) })}
@@ -1034,7 +1254,7 @@ export default function RoofPlanner({
           />
         </div>
         <button type="button" className="btn btn-primary" onClick={generaVista3d} disabled={!dist.posizionati || !mapPronta || Boolean(lavoro)}>
-          {scena3d ? "Aggiorna vista 3D" : rilievo ? "Genera vista 3D con rilievo reale" : "Genera vista 3D"}
+          {scena3d ? "Aggiorna vista 3D" : "Genera vista 3D dell'edificio"}
         </button>
       </div>
       {!aree.length && <p className="hint">Disegna almeno un&apos;area del tetto per vedere la disposizione dei moduli e generare la vista 3D.</p>}
@@ -1046,9 +1266,25 @@ export default function RoofPlanner({
             {[["sud_est", "Da Sud-Est"], ["sud_ovest", "Da Sud-Ovest"], ["nord_est", "Da Nord-Est"], ["alto", "Dall'alto"]].map(([k, l]) => (
               <button key={k} type="button" className="btn btn-ghost btn-sm" onClick={() => ref3d.current?.setVista(k)}>{l}</button>
             ))}
+            <span className="posa-sep" style={{ width: 1, alignSelf: "stretch", background: "var(--border)", margin: "0 4px" }} />
+            <button type="button" className={`btn btn-sm ${stile3d === "colori" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStile3d("colori")}>Modello a colori</button>
+            <button type="button" className={`btn btn-sm ${stile3d === "foto" ? "btn-primary" : "btn-ghost"}`} onClick={() => setStile3d("foto")} disabled={!scena3d.texture}>Foto reale</button>
+            <label className="posa-check" style={{ margin: 0 }}>
+              <input type="checkbox" checked={aree3d} onChange={(e) => setAree3d(e.target.checked)} />
+              Aree colorate
+            </label>
             <span className="hint" style={{ margin: 0 }}>Trascina per ruotare, rotellina per lo zoom.</span>
           </div>
-          <RoofScene3D ref={ref3d} scena={scena3d} />
+          <RoofScene3D ref={ref3d} scena={scena3d} stile={stile3d} mostraAree={aree3d} />
+          {scena3d.aree.length > 0 && (
+            <div className="posa-legend" style={{ position: "static", marginTop: 6, display: "flex", flexWrap: "wrap", gap: 12 }}>
+              {scena3d.aree.map((a) => (
+                <span key={a.nome + a.colore}><i style={{ background: a.colore }} /> {a.nome}</span>
+              ))}
+              <span><i style={{ background: "#1e3a8a" }} /> moduli</span>
+              <span><i style={{ background: "#ef4444" }} /> ostacoli</span>
+            </div>
+          )}
           <div className="posa-actions">
             <button type="button" className="btn btn-primary" onClick={salvaImmagini} disabled={Boolean(lavoro)}>
               Usa queste immagini nel preventivo (PDF)
