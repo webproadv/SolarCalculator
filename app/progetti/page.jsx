@@ -73,8 +73,8 @@ export default function ProgettiPage() {
           <Link className="brandmark brandmark-link" href="/" title="Torna alla home">
             <BrandSun />
             <div>
-              <b>Preventivo FV</b>
-              <small>Lenergy · SolarCalculator</small>
+              <b>Dott. Maurizio Galli</b>
+              <small>Business Energy Advisor · Preventivo FV</small>
             </div>
           </Link>
           <div className="topnav-actions">

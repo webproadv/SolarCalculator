@@ -987,8 +987,8 @@ export default function Page() {
           <a className="brandmark brandmark-link" href="/" title="Torna alla home">
             <BrandSun />
             <div>
-              <b>Preventivo FV</b>
-              <small>Lenergy · SolarCalculator</small>
+              <b>Dott. Maurizio Galli</b>
+              <small>Business Energy Advisor · Preventivo FV</small>
             </div>
           </a>
           <div className="topnav-actions">
@@ -2556,8 +2556,8 @@ function PrintReport({
               ))}
             </svg>
             <div>
-              <div className="pb-name">Lenergy Spa</div>
-              <div className="pb-tag">Energia fotovoltaica per le imprese</div>
+              <div className="pb-name">Dott. Maurizio Galli</div>
+              <div className="pb-tag">Business Energy Advisor</div>
             </div>
           </div>
           <dl className="pb-doc">
@@ -2647,12 +2647,12 @@ function PrintReport({
         </div>
 
         <p className="pb-foot-note">
-          Documento indicativo elaborato da Lenergy Spa sulla base dei consumi dichiarati dal cliente, dei dati di irraggiamento
+          Documento indicativo elaborato dal Dott. Maurizio Galli, Business Energy Advisor, sulla base dei consumi dichiarati dal cliente, dei dati di irraggiamento
           PVGIS (Commissione Europea, JRC) e dei rilievi Google Solar API. Sezioni: A) Producibilità, B) Dimensionamento,
           C) Andamento mensile, D) Soluzione economica — Noleggio operativo, E) Dati di partenza.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa — www.lenergy.it</span><span>Pagina 1 di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 1 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 2 — Sezione A: Producibilità fotovoltaica */}
@@ -2693,7 +2693,7 @@ function PrintReport({
         <h3 className="pr-h3">Produzione mensile stimata</h3>
         <PrintBarChart data={monthlyProduction} />
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 2 di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 2 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 3 — Sezione B: Dimensionamento impianto */}
@@ -2747,7 +2747,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 3 di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 3 di {6 + extra}</span></div>
       </div>
 
       {/* Pagina — Simulazione posa pannelli (solo se le immagini sono state salvate) */}
@@ -2807,7 +2807,7 @@ function PrintReport({
               : " Simulazione indicativa: la disposizione è calcolata sulle aree disegnate sulla foto satellitare; quote e pareti degli edifici nella vista 3D sono stimate."}
             {" "}Distanze dai bordi e interfila sono impostate per evitare ombreggiamenti reciproci. Ingombri, ombreggiamenti, portata della copertura e vincoli vanno verificati in sopralluogo.
           </p>
-          <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina 4 di {6 + extra}</span></div>
+          <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 4 di {6 + extra}</span></div>
         </div>
       )}
 
@@ -2870,7 +2870,7 @@ function PrintReport({
           </tbody>
         </table>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {4 + extra} di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina {4 + extra} di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 5 — Sezione D: Noleggio operativo */}
@@ -2933,7 +2933,7 @@ function PrintReport({
           Il &quot;Delta cash flow&quot; indica il guadagno (verde) o la perdita (rosso) annuo rispetto a non installare l&apos;impianto e continuare a pagare la bolletta attuale per intero.
         </p>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {5 + extra} di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina {5 + extra} di {6 + extra}</span></div>
       </div>
 
       {/* Pagina 6 — Sezione E: dati di partenza + nota metodologica */}
@@ -2971,16 +2971,14 @@ function PrintReport({
         </p>
 
         <div className="pr-contact">
-          <div className="pr-contact-name">Dr. Maurizio Galli</div>
+          <div className="pr-contact-name">Dott. Maurizio Galli</div>
           <div className="pr-contact-role">Business Energy Advisor</div>
           <div className="pr-contact-rows">
             <span><b>Tel.</b> +39 3391860201</span>
-            <span><b>Email</b> maurizio.galli@lenergy.it</span>
-            <span><b>Web</b> www.lenergy.it</span>
           </div>
         </div>
 
-        <div className="pr-footer"><span>Lenergy Spa</span><span>Pagina {6 + extra} di {6 + extra}</span></div>
+        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina {6 + extra} di {6 + extra}</span></div>
       </div>
     </div>
   );

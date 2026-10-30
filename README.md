@@ -54,7 +54,7 @@ L'app è protetta da autenticazione: **nessuna pagina è raggiungibile senza ave
 2. Dopo il login, il middleware verifica che l'email dell'utente sia presente nella tabella Supabase `authorized_emails`. Se non lo è, viene mostrata la pagina `/non-autorizzato` (o, per le chiamate API, un errore 403) e l'app resta inaccessibile.
 3. Per autorizzare una persona, basta aggiungere una riga nella tabella `authorized_emails` (colonna `email`) dal SQL editor di Supabase — non serve nessuna modifica al codice o un nuovo deploy:
    ```sql
-   insert into public.authorized_emails (email, note) values ('nome.cognome@lenergy.it', 'Commerciale');
+   insert into public.authorized_emails (email, note) values ('nome.cognome@esempio.it', 'Commerciale');
    ```
 
 Ogni preventivo generato può essere salvato con il pulsante **"💾 Salva progetto"** in dashboard: viene creata una riga nella tabella Supabase `progetti`, con uno snapshot completo di azienda, preventivo, consumi mensili e valori proposti (impianto, accumulo, costo) — pensato anche per la futura funzione di stampa PDF, che potrà leggere questi stessi dati senza richiamare di nuovo le API esterne. La pagina **"📂 I miei progetti"** (in alto, sempre visibile) elenca tutti i progetti salvati da chiunque sia autorizzato — è un archivio condiviso di lavoro, non separato per singolo utente — e permette di riaprirli in dashboard con i valori con cui erano stati salvati, eliminarli definitivamente (**"Elimina"**) o inviarli come nuovo lead al foglio del team (**"📤 Pipe"**, vedi sotto).
