@@ -2762,9 +2762,9 @@ function PrintReport({
           <p className="pr-note" style={{ margin: "4px 0 10px" }}>
             Vista dall&apos;alto: aree utili in giallo, moduli posizionati in blu scuro, eventuali ostacoli in rosso.
           </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <img src={posaPdf.v3d1} alt="Vista 3D da Sud-Est" className="pr-photo" />
-            <img src={posaPdf.v3d2} alt="Vista 3D da Sud-Ovest" className="pr-photo" />
+          <div style={{ display: "grid", gridTemplateColumns: posaPdf.v3d2 ? "1fr 1fr" : "1fr", gap: 8, ...(posaPdf.v3d2 ? {} : { maxWidth: "68%", margin: "0 auto" }) }}>
+            <img src={posaPdf.v3d1} alt="Vista 3D della simulazione" className="pr-photo" />
+            {posaPdf.v3d2 && <img src={posaPdf.v3d2} alt="Seconda vista 3D della simulazione" className="pr-photo" />}
           </div>
           <table className="pr-table" style={{ marginTop: 10 }}>
             <thead>

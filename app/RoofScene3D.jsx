@@ -28,7 +28,7 @@ import { quotaIn, quotaPiano } from "../lib/rilievo";
 //    rilievo?: { nx, ny, passoM, estensioneM, quote(Float32Array, m) }   // DSM reale
 //  }
 //  stile: "colori" | "foto"      mostraAree: evidenzia le aree con il loro colore
-// ref: { setVista(nome), cattura(nome, larghezza, altezza) -> dataURL JPEG, setStile, setAree }
+// ref: { setVista(nome), cattura(nome|null, larghezza, altezza) -> dataURL JPEG (null = vista corrente), setStile, setAree }
 
 const DEG = Math.PI / 180;
 const MODULO = { l: 1.961, w: 1.134, t: 0.03 };
@@ -755,8 +755,10 @@ const RoofScene3D = forwardRef(function RoofScene3D({ scena, className, stile = 
       ridimensiona();
       setVista("sud_est");
 
+      // nome = "alto" | "sud_est" | ... porta la camera su una vista standard;
+      // senza nome (o "corrente") si cattura la vista così com'è: zoom e angolazione dell'utente
       function cattura(nome, larghezza, altezza) {
-        if (nome) setVista(nome);
+        if (nome && nome !== "corrente") setVista(nome);
         const wPrima = renderer.domElement.width;
         const hPrima = renderer.domElement.height;
         const pr = renderer.getPixelRatio();

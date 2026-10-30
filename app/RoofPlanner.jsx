@@ -1003,16 +1003,23 @@ export default function RoofPlanner({
     }
   }
 
-  async function salvaImmagini() {
+  // slot 1: pianta + vista 3D corrente (riepilogo incluso); slot 2: una seconda vista 3D a scelta.
+  // La vista è sempre quella che l'utente ha in schermo (zoom e angolazione compresi).
+  async function salvaImmagini(slot = 1) {
     const map = mapRef.current;
     if (!map || !scena3d || !ref3d.current) return;
     setLavoro("Salvo le immagini nel preventivo…");
     try {
+      if (slot === 2 && posa?.immagini && immaginiAttuali) {
+        const vista2 = ref3d.current.cattura(null, 1100, 688);
+        aggiornaPosa({ immagini: { ...posa.immagini, v3d2: vista2, data: new Date().toISOString() } });
+        return;
+      }
       await aspettaMappa(map);
       const piantaGrezza = map.getCanvas().toDataURL("image/jpeg", 0.9);
       const pianta = await riduciImmagine(piantaGrezza, 1300, 0.82);
-      const v1 = ref3d.current.cattura("sud_est", 1100, 688);
-      const v2 = ref3d.current.cattura("sud_ovest", 1100, 688);
+      const v1 = ref3d.current.cattura(null, 1100, 688);
+      const v2 = null;
       const riepilogo = {
         richiesti: richiesti,
         posizionati: calcolo.dist.posizionati,
@@ -1049,7 +1056,7 @@ export default function RoofPlanner({
 
   function scaricaVista() {
     if (!ref3d.current) return;
-    const url = ref3d.current.cattura("sud_est", 1600, 1000);
+    const url = ref3d.current.cattura(null, 1600, 1000); // la vista così com'è, non quella iniziale
     const a = document.createElement("a");
     a.href = url;
     a.download = "simulazione-posa-pannelli.jpg";
@@ -1529,9 +1536,14 @@ export default function RoofPlanner({
             </div>
           )}
           <div className="posa-actions">
-            <button type="button" className="btn btn-primary" onClick={salvaImmagini} disabled={Boolean(lavoro)}>
-              Usa queste immagini nel preventivo (PDF)
+            <button type="button" className="btn btn-primary" onClick={() => salvaImmagini(1)} disabled={Boolean(lavoro)}>
+              Usa questa vista nel preventivo (PDF)
             </button>
+            {immaginiAttuali && (
+              <button type="button" className="btn btn-ghost" onClick={() => salvaImmagini(2)} disabled={Boolean(lavoro)} title="Muovi la vista 3D come preferisci e aggiungila come seconda immagine del PDF">
+                {immagini?.v3d2 ? "Sostituisci la seconda vista nel PDF" : "Aggiungi questa vista come seconda immagine"}
+              </button>
+            )}
             <button type="button" className="btn btn-ghost" onClick={scaricaVista}>Scarica immagine 3D</button>
           </div>
           <p className="hint">
