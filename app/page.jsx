@@ -7,6 +7,7 @@ import { UserButton } from "@clerk/nextjs";
 import SatellitePreviewMap from "./SatellitePreviewMap";
 import OrientamentoDial from "./OrientamentoDial";
 import RoofPlanner from "./RoofPlanner";
+import PpaSection from "./PpaSection";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -1632,6 +1633,10 @@ function Dashboard({
     RATE_NOLEGGIO_OPTIONS.includes(Number(initialNumeroRateNoleggio)) ? Number(initialNumeroRateNoleggio) : 84
   );
 
+  // Sezione F (PPA): visibile solo quando l'utente preme il bottone "PPA" in
+  // fondo alla dashboard.
+  const [ppaOpen, setPpaOpen] = useState(false);
+
   // Esportazione "CSV Noleggio" / "PDF Noleggio" (stesso formato dati,
   // richiesto dal partner Alaska: vedi buildAlaskaCsv/buildAlaskaFieldMap).
   // Referente/cellulare/email si inseriscono nello step "Consumi e spesa"
@@ -1873,6 +1878,20 @@ function Dashboard({
     batteriaKwh,
   });
   const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
+
+  // Sezione F (PPA): l'autoconsumo venduto al cliente è SOLO quello in fascia
+  // F1, mese per mese = MIN(produzione, consumo F1 del mese); tutto il resto
+  // della produzione è immissione GSE. Senza tabella mensile (progetti
+  // vecchi) il totale F1 è distribuito con la stessa stagionalità del consumo.
+  const f1Mensile = hasMonthlyDettaglio
+    ? MESI.map((_, i) => Number(monthly[i]?.f1) || 0)
+    : applyMonthlyShape(
+        quote.input.f1Kwh || 0,
+        Array.isArray(ocrMonthlyKwh) && ocrMonthlyKwh.length === 12 && ocrMonthlyKwh.every((v) => typeof v === "number" && v >= 0)
+          ? ocrMonthlyKwh
+          : CONSUMO_MONTHLY_SHAPE_FALLBACK
+      );
+  const ppaAutoconsumoF1Kwh = Math.round(monthlyProduction.reduce((s, p, i) => s + Math.min(p || 0, f1Mensile[i] || 0), 0));
   const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
     spesaAnnua: quote.input.spesaAnnua,
@@ -2014,6 +2033,7 @@ function Dashboard({
         <a href="#c"><b>C</b> Andamento mensile</a>
         <a href="#d"><b>D</b> Noleggio</a>
         <a href="#e"><b>E</b> Dati di partenza</a>
+        {ppaOpen && <a href="#f"><b>F</b> PPA</a>}
       </nav>
 
       <div className="header">
@@ -2458,6 +2478,31 @@ function Dashboard({
           </div>
         </div>
       </section>
+
+      <div className="ppa-bar">
+        <button
+          type="button"
+          className="ppa-btn"
+          aria-expanded={ppaOpen}
+          aria-controls="f"
+          onClick={() => {
+            const apri = !ppaOpen;
+            setPpaOpen(apri);
+            if (apri) setTimeout(() => document.getElementById("f")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+          }}
+        >
+          <span>PPA</span><span className="chev">▾</span>
+        </button>
+      </div>
+
+      {ppaOpen && (
+        <PpaSection
+          produzioneKwh={produzioneAnnuaTotaleKwh}
+          autoconsumoF1Kwh={ppaAutoconsumoF1Kwh}
+          prezzoMedio={econ.prezzoMedio}
+          costoListino={costoImpianto}
+        />
+      )}
 
       <div className="footnote">
         <strong>Nota metodologica:</strong> la produzione dell&apos;impianto è calcolata con PVGIS (Commissione Europea, JRC) sulla posizione del tetto confermata, con esposizione {String(quote.input.pvgisIpotesi?.orientamento || "Sud (0°)")}, inclinazione {quote.input.pvgisIpotesi?.inclinazioneGradi ?? 25}°, pannelli monocristallini 2025 su tetto (Free standing) e perdite di sistema del {quote.input.pvgisIpotesi?.perditePct ?? 12}%, come media degli anni 2014-2024, mese per mese e riscalata sulla taglia di impianto proposta. Il fabbisogno diurno/notturno è calcolato dalla ripartizione F1/F2/F3 e dai giorni lavorativi dichiarati. La percentuale di autoconsumo è calcolata con una simulazione mese per mese (autoconsumo mensile = consumo diurno coperto dalla produzione + quota di surplus spostata di notte dall'accumulo, limitata al consumo notturno del mese; immissione = produzione − autoconsumo; somma sui 12 mesi), non una stima forfettaria. Tutti i valori economici sono IVA esclusa. La tariffa CER
