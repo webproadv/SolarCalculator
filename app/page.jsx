@@ -1879,19 +1879,15 @@ function Dashboard({
   });
   const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
 
-  // Sezione F (PPA): l'autoconsumo venduto al cliente è SOLO quello in fascia
-  // F1, mese per mese = MIN(produzione, consumo F1 del mese); tutto il resto
-  // della produzione è immissione GSE. Senza tabella mensile (progetti
-  // vecchi) il totale F1 è distribuito con la stessa stagionalità del consumo.
-  const f1Mensile = hasMonthlyDettaglio
-    ? MESI.map((_, i) => Number(monthly[i]?.f1) || 0)
-    : applyMonthlyShape(
-        quote.input.f1Kwh || 0,
-        Array.isArray(ocrMonthlyKwh) && ocrMonthlyKwh.length === 12 && ocrMonthlyKwh.every((v) => typeof v === "number" && v >= 0)
-          ? ocrMonthlyKwh
-          : CONSUMO_MONTHLY_SHAPE_FALLBACK
-      );
-  const ppaAutoconsumoF1Kwh = Math.round(monthlyProduction.reduce((s, p, i) => s + Math.min(p || 0, f1Mensile[i] || 0), 0));
+  // Sezione F (PPA): l'energia venduta al cliente è TUTTO il consumo annuo in
+  // fascia F1 (dalla tabella mensile F1/F2/F3, oppure dal totale F1 dei
+  // progetti vecchi), al massimo pari alla produzione annua dell'impianto
+  // (non si può vendere più di quanto si produce). Tutto il resto della
+  // produzione è immissione GSE.
+  const consumoF1AnnuoKwh = hasMonthlyDettaglio
+    ? MESI.reduce((s, _, i) => s + (Number(monthly[i]?.f1) || 0), 0)
+    : quote.input.f1Kwh || 0;
+  const ppaAutoconsumoF1Kwh = Math.round(Math.min(consumoF1AnnuoKwh, produzioneAnnuaTotaleKwh));
   const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
     spesaAnnua: quote.input.spesaAnnua,
