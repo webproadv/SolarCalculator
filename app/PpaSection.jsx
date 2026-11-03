@@ -144,7 +144,7 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
           <h3>Dati dall&apos;analisi <span className="ppa-tag">automatici</span></h3>
           <div className="card-note">Letti dalle Sezioni B e C — non da reinserire</div>
           <div className="ppa-row"><span>Produzione totale annua impianto</span><b>{grp(produzioneKwh || 0)} kWh</b></div>
-          <div className="ppa-row"><span>Consumo F1 del cliente — tutta la fascia F1 (venduto)</span><b>{grp(f1Kwh)} kWh</b></div>
+          <div className="ppa-row"><span>Consumo F1 in bolletta — tutta la fascia F1 (venduto)</span><b>{grp(f1Kwh)} kWh</b></div>
           <div className="ppa-row"><span>Immissione GSE = produzione − energia F1 venduta</span><b>{grp(immessoKwh)} kWh</b></div>
           <div className="ppa-row"><span>Prezzo medio energia attuale (IVA esclusa)</span><b>{eur(prezzoMedio || 0, 3)}/kWh</b></div>
           <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -246,6 +246,9 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
           {!over && !margineBasso && (
             <div className="ppa-alert ok">✅ <div><b>Obiettivo rispettato:</b> rientro in {anniTxt(r.anniRientro)} anni, {anniTxt(r.anniGuadagno)} anni di guadagno.</div></div>
           )}
+          {f1Kwh > (produzioneKwh || 0) && (
+            <div className="ppa-alert warn">⚠️ <div><b>Il consumo F1 ({grp(f1Kwh)} kWh) supera la produzione annua dell&apos;impianto ({grp(produzioneKwh || 0)} kWh):</b> l&apos;impianto non può coprire tutta la fascia F1, quindi il ricavo da vendita è teorico e l&apos;immissione GSE è zero.</div></div>
+          )}
           {f1Kwh <= 0 && (
             <div className="ppa-alert crit">⛔ <div><b>Nessun consumo F1:</b> senza consumi F1 non c&apos;è energia da vendere al cliente. Controlla la tabella consumi.</div></div>
           )}
@@ -293,7 +296,7 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
       )}
 
       <div className="hint" style={{ marginTop: 14 }}>
-        Come si calcola: ricavo annuo = (tutti i kWh consumati in F1 × tariffa fissa) + ((produzione totale − kWh F1) × tariffa GSE) · tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo · tariffa necessaria = ((costo effettivo − anticipo) ÷ anni di rientro − ricavo GSE annuo) ÷ kWh F1. Si vende al cliente tutto il consumo F1 annuo, al massimo pari alla produzione dell&apos;impianto. Valori IVA esclusa.
+        Come si calcola: ricavo annuo = (tutti i kWh consumati in F1 × tariffa fissa) + ((produzione totale − kWh F1) × tariffa GSE) · tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo · tariffa necessaria = ((costo effettivo − anticipo) ÷ anni di rientro − ricavo GSE annuo) ÷ kWh F1. Si vende al cliente tutto il consumo F1 annuo letto in bolletta (somma dei 12 mesi). Valori IVA esclusa.
       </div>
     </section>
   );

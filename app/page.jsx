@@ -1880,14 +1880,13 @@ function Dashboard({
   const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
 
   // Sezione F (PPA): l'energia venduta al cliente è TUTTO il consumo annuo in
-  // fascia F1 (dalla tabella mensile F1/F2/F3, oppure dal totale F1 dei
-  // progetti vecchi), al massimo pari alla produzione annua dell'impianto
-  // (non si può vendere più di quanto si produce). Tutto il resto della
-  // produzione è immissione GSE.
+  // fascia F1 letto in bolletta (somma dei 12 mesi della tabella F1/F2/F3
+  // confermata, oppure il totale F1 dei progetti vecchi), senza limiti.
+  // Tutto il resto della produzione è immissione GSE.
   const consumoF1AnnuoKwh = hasMonthlyDettaglio
     ? MESI.reduce((s, _, i) => s + (Number(monthly[i]?.f1) || 0), 0)
     : quote.input.f1Kwh || 0;
-  const ppaAutoconsumoF1Kwh = Math.round(Math.min(consumoF1AnnuoKwh, produzioneAnnuaTotaleKwh));
+  const ppaAutoconsumoF1Kwh = Math.round(consumoF1AnnuoKwh);
   const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
     spesaAnnua: quote.input.spesaAnnua,
