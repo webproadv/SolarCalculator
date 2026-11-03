@@ -604,3 +604,6 @@ a.btn, a.btn:hover { text-decoration: none; }
 .ppa-alert.crit{ background:var(--crit-soft); border:1px solid var(--crit); }
 .ppa-grid2 > .card{ margin-top:0; }
 .field input[type="range"]{ width:100%; }
+.ppa-details{ margin-top:14px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; }
+.ppa-details summary{ cursor:pointer; font-weight:600; font-size:14px; }
+.ppa-scroll{ overflow-x:auto; margin-top:10px; }

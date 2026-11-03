@@ -60,7 +60,7 @@ function PpaChart({ r }) {
   );
 }
 
-export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedio, costoListino }) {
+export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1BollettaKwh, mensile, prezzoMedio, costoListino }) {
   const [modo, setModo] = useState(2); // 2 = anni → tariffa (configurazione ottimale)
   const [costo, setCosto] = useState("");
   const [anticipo, setAnticipo] = useState("0");
@@ -144,8 +144,9 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
           <h3>Dati dall&apos;analisi <span className="ppa-tag">automatici</span></h3>
           <div className="card-note">Letti dalle Sezioni B e C — non da reinserire</div>
           <div className="ppa-row"><span>Produzione totale annua impianto</span><b>{grp(produzioneKwh || 0)} kWh</b></div>
-          <div className="ppa-row"><span>Consumo F1 in bolletta — tutta la fascia F1 (venduto)</span><b>{grp(f1Kwh)} kWh</b></div>
-          <div className="ppa-row"><span>Immissione GSE = produzione − energia F1 venduta</span><b>{grp(immessoKwh)} kWh</b></div>
+          <div className="ppa-row"><span>Consumo F1 totale in bolletta</span><b>{grp(f1BollettaKwh || 0)} kWh</b></div>
+          <div className="ppa-row"><span>F1 vendibile = somma mensile di MIN(produzione, F1)</span><b>{grp(f1Kwh)} kWh</b></div>
+          <div className="ppa-row"><span>Immissione GSE = produzione − F1 venduto</span><b>{grp(immessoKwh)} kWh</b></div>
           <div className="ppa-row"><span>Prezzo medio energia attuale (IVA esclusa)</span><b>{eur(prezzoMedio || 0, 3)}/kWh</b></div>
           <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
             <label>Tariffa GSE (€/kWh)</label>
@@ -246,9 +247,6 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
           {!over && !margineBasso && (
             <div className="ppa-alert ok">✅ <div><b>Obiettivo rispettato:</b> rientro in {anniTxt(r.anniRientro)} anni, {anniTxt(r.anniGuadagno)} anni di guadagno.</div></div>
           )}
-          {f1Kwh > (produzioneKwh || 0) && (
-            <div className="ppa-alert warn">⚠️ <div><b>Il consumo F1 ({grp(f1Kwh)} kWh) supera la produzione annua dell&apos;impianto ({grp(produzioneKwh || 0)} kWh):</b> l&apos;impianto non può coprire tutta la fascia F1, quindi il ricavo da vendita è teorico e l&apos;immissione GSE è zero.</div></div>
-          )}
           {f1Kwh <= 0 && (
             <div className="ppa-alert crit">⛔ <div><b>Nessun consumo F1:</b> senza consumi F1 non c&apos;è energia da vendere al cliente. Controlla la tabella consumi.</div></div>
           )}
@@ -295,8 +293,38 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, prezzoMedi
         </>
       )}
 
+      {Array.isArray(mensile) && mensile.length === 12 && (
+        <details className="ppa-details">
+          <summary>Dettaglio mensile — F1 vendibile al cliente</summary>
+          <div className="ppa-scroll">
+            <table className="ppa-table">
+              <thead><tr><th>Mese</th><th className="num">Produzione impianto</th><th className="num">Consumo F1 bolletta</th><th className="num">F1 venduto</th><th className="num">Immesso GSE</th></tr></thead>
+              <tbody>
+                {mensile.map((m) => (
+                  <tr key={m.mese}>
+                    <td>{m.mese}</td>
+                    <td className="num">{grp(m.produzione)}</td>
+                    <td className="num">{grp(m.f1)}</td>
+                    <td className="num">{grp(m.venduto)}{m.f1 > m.produzione ? " *" : ""}</td>
+                    <td className="num">{grp(Math.max(0, m.produzione - m.venduto))}</td>
+                  </tr>
+                ))}
+                <tr className="sum">
+                  <td>Totale (kWh)</td>
+                  <td className="num">{grp(mensile.reduce((s, m) => s + m.produzione, 0))}</td>
+                  <td className="num">{grp(mensile.reduce((s, m) => s + m.f1, 0))}</td>
+                  <td className="num">{grp(mensile.reduce((s, m) => s + m.venduto, 0))}</td>
+                  <td className="num">{grp(mensile.reduce((s, m) => s + Math.max(0, m.produzione - m.venduto), 0))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="hint">* mese in cui il consumo F1 supera la produzione: si vende solo la produzione.</p>
+        </details>
+      )}
+
       <div className="hint" style={{ marginTop: 14 }}>
-        Come si calcola: ricavo annuo = (tutti i kWh consumati in F1 × tariffa fissa) + ((produzione totale − kWh F1) × tariffa GSE) · tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo · tariffa necessaria = ((costo effettivo − anticipo) ÷ anni di rientro − ricavo GSE annuo) ÷ kWh F1. Si vende al cliente tutto il consumo F1 annuo letto in bolletta (somma dei 12 mesi). Valori IVA esclusa.
+        Come si calcola: ricavo annuo = (kWh F1 venduti × tariffa fissa) + ((produzione totale − kWh F1 venduti) × tariffa GSE) · tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo · tariffa necessaria = ((costo effettivo − anticipo) ÷ anni di rientro − ricavo GSE annuo) ÷ kWh F1 venduti. I kWh F1 venduti si calcolano mese per mese: per ogni mese il minore tra produzione dell&apos;impianto e consumo F1 in bolletta; la somma dei 12 mesi è il totale. Valori IVA esclusa.
       </div>
     </section>
   );

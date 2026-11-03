@@ -1879,14 +1879,27 @@ function Dashboard({
   });
   const autoconsumoPct = Math.round(autoconsumoSim.autoconsumoPct * 1000) / 10; // percentuale, 1 decimale
 
-  // Sezione F (PPA): l'energia venduta al cliente è TUTTO il consumo annuo in
-  // fascia F1 letto in bolletta (somma dei 12 mesi della tabella F1/F2/F3
-  // confermata, oppure il totale F1 dei progetti vecchi), senza limiti.
-  // Tutto il resto della produzione è immissione GSE.
-  const consumoF1AnnuoKwh = hasMonthlyDettaglio
-    ? MESI.reduce((s, _, i) => s + (Number(monthly[i]?.f1) || 0), 0)
-    : quote.input.f1Kwh || 0;
-  const ppaAutoconsumoF1Kwh = Math.round(consumoF1AnnuoKwh);
+  // Sezione F (PPA): energia F1 vendibile al cliente, calcolata MESE PER MESE:
+  // per ogni mese = MIN(produzione dell'impianto, consumo F1 in bolletta).
+  // Se il consumo F1 del mese supera la produzione si prende solo la
+  // produzione; la somma dei 12 mesi è il totale venduto in F1. Il resto della
+  // produzione è immissione GSE. Senza tabella mensile (progetti vecchi) il
+  // totale F1 è distribuito con la stessa stagionalità del consumo.
+  const f1Mensile = hasMonthlyDettaglio
+    ? MESI.map((_, i) => Number(monthly[i]?.f1) || 0)
+    : applyMonthlyShape(
+        quote.input.f1Kwh || 0,
+        Array.isArray(ocrMonthlyKwh) && ocrMonthlyKwh.length === 12 && ocrMonthlyKwh.every((v) => typeof v === "number" && v >= 0)
+          ? ocrMonthlyKwh
+          : CONSUMO_MONTHLY_SHAPE_FALLBACK
+      );
+  const ppaMensile = MESI_BREVI.map((mese, i) => {
+    const produzione = Math.round(monthlyProduction[i] || 0);
+    const f1 = Math.round(f1Mensile[i] || 0);
+    return { mese, produzione, f1, venduto: Math.min(produzione, f1) };
+  });
+  const ppaAutoconsumoF1Kwh = ppaMensile.reduce((s, m) => s + m.venduto, 0);
+  const ppaF1BollettaKwh = ppaMensile.reduce((s, m) => s + m.f1, 0);
   const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
     spesaAnnua: quote.input.spesaAnnua,
@@ -2494,6 +2507,8 @@ function Dashboard({
         <PpaSection
           produzioneKwh={produzioneAnnuaTotaleKwh}
           autoconsumoF1Kwh={ppaAutoconsumoF1Kwh}
+          f1BollettaKwh={ppaF1BollettaKwh}
+          mensile={ppaMensile}
           prezzoMedio={econ.prezzoMedio}
           costoListino={costoImpianto}
         />
