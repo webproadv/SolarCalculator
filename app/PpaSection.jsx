@@ -18,7 +18,7 @@ const anniTxt = (v) => grp(v, 1).replace(/,0$/, "");
 
 export function PpaChart({ r, print = false }) {
   const C = print
-    ? { grid: "#D8DCD3", axis: "#7A857D", ink: "#171D1B", ppa: "#0E7C86", good: "#2F8F5B", crit: "#B33B30", bg: "#FFFFFF" }
+    ? { grid: "#D8DCD3", axis: "#7A857D", ink: "#171D1B", ppa: "#1E4FA3", good: "#2F8F5B", crit: "#B33B30", bg: "#FFFFFF" }
     : { grid: "var(--border)", axis: "var(--ink-faint)", ink: "var(--ink)", ppa: "var(--c-ppa)", good: "var(--c-good)", crit: "var(--crit)", bg: "var(--surface)" };
   const W = 640, H = 220, L = 58, Rm = 40, T = 26, B = 30;
   const rec = r.daRecuperare;

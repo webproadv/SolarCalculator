@@ -76,49 +76,70 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
           <p className="pr-note">Dati dell&apos;operazione non ancora inseriti (costo effettivo impianto).</p>
         ) : (
           <>
-            {/* Vantaggi: cliente | noi */}
-            <div className="ppa-pdf-adv">
-              <section className="ppa-pdf-card cliente">
-                <div className="ppa-pdf-who">Vantaggi per il cliente</div>
-                <div className="ppa-pdf-big">
-                  {r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—"}
-                  <small>di risparmio annuo in bolletta</small>
+            {/* VANTAGGI PER IL CLIENTE — la sua bolletta: oggi → durante il PPA → dopo il PPA */}
+            <section className="ppa-pdf-band cliente">
+              <div className="ppa-pdf-band-head">
+                <b>Vantaggi per il cliente</b>
+                <span>{r.anticipo > 0 ? `Anticipo ${eur(r.anticipo)}` : "Nessun investimento"} · tariffa fissa {eur(r.tariffa, 3)}/kWh bloccata per {durTxt} anni</span>
+              </div>
+              <div className="ppa-pdf-flow">
+                <div className="ppa-pdf-tile">
+                  <span className="t">Spesa annua in bolletta oggi</span>
+                  <span className="v">{r.spesaAnnuaNetta > 0 ? eur(r.spesaAnnuaNetta) : "—"}</span>
+                  <span className="s">IVA esclusa</span>
                 </div>
-                <div className="ppa-pdf-rows">
-                  <div><span>Investimento richiesto</span><b>{r.anticipo > 0 ? `Anticipo ${eur(r.anticipo)}` : "Nessuno (€ 0)"}</b></div>
-                  <div><span>Spesa annua in bolletta attuale</span><b>{r.spesaAnnuaNetta > 0 ? eur(r.spesaAnnuaNetta) : "—"}</b></div>
-                  <div><span>Spesa annua durante il PPA ({durTxt} anni)</span><b>{r.spesaDuranteAnnua != null ? eur(r.spesaDuranteAnnua) : "—"}</b></div>
-                  <div><span>Risparmio annuo in bolletta</span><b>{r.risparmioAnnuoCliente != null ? eur(r.risparmioAnnuoCliente) : "—"}</b></div>
-                  <div><span>Spesa annua dopo il PPA (impianto suo)</span><b>{r.spesaDopoAnnua != null ? eur(r.spesaDopoAnnua) : "—"}</b></div>
-                  <div><span>Tariffa fissa bloccata per</span><b>{durTxt} anni</b></div>
+                <div className="ppa-pdf-arrow" aria-hidden="true">→</div>
+                <div className="ppa-pdf-tile">
+                  <span className="t">Spesa annua durante il PPA</span>
+                  <span className="v">{r.spesaDuranteAnnua != null ? eur(r.spesaDuranteAnnua) : "—"}</span>
+                  <span className="s">{r.spesaDuranteTotale != null ? `${eur(r.spesaDuranteTotale)} su ${durTxt} anni` : `per ${durTxt} anni`}</span>
                 </div>
-              </section>
+                <div className="ppa-pdf-arrow" aria-hidden="true">→</div>
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Risparmio annuo in bolletta</span>
+                  <span className="v">{r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—"}</span>
+                  <span className="s">{r.risparmioAnnuoCliente != null ? `${eur(r.risparmioAnnuoCliente)} all'anno` : ""}</span>
+                </div>
+                <div className="ppa-pdf-arrow" aria-hidden="true">→</div>
+                <div className="ppa-pdf-tile">
+                  <span className="t">Spesa annua dopo il PPA</span>
+                  <span className="v">{r.spesaDopoAnnua != null ? eur(r.spesaDopoAnnua) : "—"}</span>
+                  <span className="s">impianto di proprietà del cliente{r.risparmioDopoPct != null ? ` · ${grp(r.risparmioDopoPct, 1)} % in meno di oggi` : ""}</span>
+                </div>
+              </div>
+            </section>
 
-              <section className="ppa-pdf-card noi">
-                <div className="ppa-pdf-who">Vantaggi per noi</div>
-                <div className="ppa-pdf-big">
-                  {eur(r.guadagnoNetto)}
-                  <small>guadagno netto a fine accordo</small>
+            {/* VANTAGGI PER NOI */}
+            <section className="ppa-pdf-band noi">
+              <div className="ppa-pdf-band-head">
+                <b>Vantaggi per noi</b>
+                <span>Investimento da recuperare {eur(r.daRecuperare)} · ritorno annuo {r.roiAnnuoPct != null ? `${grp(r.roiAnnuoPct, 1)} %` : "—"} · ritorno totale {r.roiTotalePct != null ? `${grp(r.roiTotalePct, 0)} %` : "—"}</span>
+              </div>
+              <div className="ppa-pdf-flow four">
+                <div className="ppa-pdf-tile">
+                  <span className="t">Ricavo annuo</span>
+                  <span className="v">{eur(r.ricavoAnnuo)}</span>
+                  <span className="s">vendita F1 + GSE</span>
                 </div>
-                <div className="ppa-pdf-rows">
-                  <div><span>Investimento da recuperare</span><b>{eur(r.daRecuperare)}</b></div>
-                  <div><span>Ricavo annuo (vendita F1 + GSE)</span><b>{eur(r.ricavoAnnuo)}</b></div>
-                  <div><span>Tempo di rientro</span><b>{Number.isFinite(r.anniRientro) ? `${grp(r.anniRientro, 1)} anni` : "—"}</b></div>
-                  <div><span>Ritorno annuo</span><b>{r.roiAnnuoPct != null ? `${grp(r.roiAnnuoPct, 1)} %` : "—"}</b></div>
-                  <div><span>Ritorno totale su {durTxt} anni</span><b>{r.roiTotalePct != null ? `${grp(r.roiTotalePct, 1)} %` : "—"}</b></div>
-                  <div><span>Anni di guadagno puro</span><b>{anniTxt(r.anniGuadagno)} anni</b></div>
+                <div className="ppa-pdf-tile">
+                  <span className="t">Tempo di rientro</span>
+                  <span className="v">{Number.isFinite(r.anniRientro) ? `${grp(r.anniRientro, 1)} anni` : "—"}</span>
+                  <span className="s">{anniTxt(r.anniGuadagno)} anni di guadagno puro</span>
                 </div>
-              </section>
-            </div>
+                <div className="ppa-pdf-tile">
+                  <span className="t">Ricavo totale</span>
+                  <span className="v">{eur(r.ricavoTotale)}</span>
+                  <span className="s">su {durTxt} anni</span>
+                </div>
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Guadagno netto</span>
+                  <span className="v">{eur(r.guadagnoNetto)}</span>
+                  <span className="s">a fine accordo</span>
+                </div>
+              </div>
+            </section>
 
-            <div className="pb-kpis">
-              <div className="pb-kpi"><span className="v">{eur(r.ricavoAnnuo)}</span><span className="l">Ricavo annuo</span></div>
-              <div className="pb-kpi"><span className="v">{Number.isFinite(r.anniRientro) ? `${grp(r.anniRientro, 1)} anni` : "—"}</span><span className="l">Tempo di rientro</span></div>
-              <div className="pb-kpi"><span className="v">{eur(r.ricavoTotale)}</span><span className="l">Ricavo totale su {durTxt} anni</span></div>
-              <div className="pb-kpi"><span className="v">{r.roiTotalePct != null ? `${grp(r.roiTotalePct, 0)} %` : "—"}</span><span className="l">Ritorno totale sull&apos;investimento</span></div>
-            </div>
-
-            <div className="pb-panel">
+            <div className="pb-panel ppa-pdf-chartpanel">
               <h4>Durata dell&apos;accordo: rientro e guadagno <span>{durTxt} anni</span></h4>
               <div className="ppa-pdf-tl">
                 {over ? (
