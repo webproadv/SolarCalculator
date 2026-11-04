@@ -715,3 +715,60 @@ a.btn, a.btn:hover { text-decoration: none; }
   .ppa-chart-print{ max-height:52mm; }
   .print-report-ppa .pr-footer{ border-top:1px solid #D8DCD3; }
 }
+
+/* ---- PDF PPA semplificato (approvazione): pagina 1 = KPI principali, pagina 2 = dettagli.
+   Nessuna intestazione/piè di pagina: solo numero pagina. Pagina nominata "ppa" con
+   margine 0 → Chrome non stampa URL/data/titolo; i margini sono il padding di .pr-page. ---- */
+@page ppa{ size:A4; margin:0; }
+@media print{
+  .print-report-ppa{ page:ppa; }
+  .print-report-ppa .pr-page{
+    box-sizing:border-box; width:210mm; height:296mm; min-height:296mm; max-height:296mm;
+    padding:16mm 15mm 14mm; overflow:hidden; break-inside:avoid;
+  }
+  .print-report-ppa .pr-page:last-child{ break-after:auto; }
+  .ppa-pageno{ margin-top:auto; text-align:right; font-size:9px; color:#74887C; font-variant-numeric:tabular-nums; }
+
+  /* pagina 1 */
+  .ppa-p1-head{ margin:4mm 0 9mm; padding-bottom:6mm; border-bottom:2px solid #1E4FA3; }
+  .ppa-p1-kicker{ display:block; font-family:"Manrope"; font-weight:800; font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:#1E4FA3; margin-bottom:3mm; }
+  .ppa-p1-head .pr-h1{ font-size:30px; margin:0 0 3mm; }
+  .ppa-p1-sum{ margin:0; font-size:11.5px; color:#4B564F; }
+  .ppa-pdf-band.big{ margin-bottom:9mm; }
+  .ppa-pdf-band.big .ppa-pdf-band-head{ padding:10px 16px; }
+  .ppa-pdf-band.big .ppa-pdf-band-head b{ font-size:12px; }
+  .ppa-pdf-band.big .ppa-pdf-band-head span{ font-size:10px; }
+  .ppa-pdf-band.big .ppa-pdf-flow{ padding:16px; gap:8px; }
+  .ppa-pdf-band.big .ppa-pdf-tile{ padding:14px 12px; gap:4px; min-height:34mm; }
+  .ppa-pdf-band.big .ppa-pdf-tile .t{ font-size:9px; }
+  .ppa-pdf-band.big .ppa-pdf-tile .v{ font-size:21px; }
+  .ppa-pdf-band.big .ppa-pdf-tile .s{ font-size:9.5px; }
+  .ppa-pdf-band.big .ppa-pdf-tile.hl .v{ font-size:28px; }
+  .ppa-pdf-band.big .ppa-pdf-flow.four{ gap:10px; }
+  .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 16px 16px; height:30px; }
+  .ppa-pdf-band.big .ppa-pdf-tl > div{ font-size:11px; }
+
+  /* pagina 2 */
+  .ppa-p2-sub{ margin:0 0 2mm; font-size:10px; color:#4B564F; }
+  .print-report-ppa .pr-h3{ margin:10px 0 4px; }
+  .print-report-ppa .pr-h3.cliente{ border-left-color:#0E7C5A; }
+  .print-report-ppa .pr-table{ margin:4px 0 6px; }
+  .print-report-ppa .pr-table th:not(.num):first-child{ width:60%; }
+  .print-report-ppa .ppa-pdf-cli th{ background:#0E7C5A; }
+  .print-report-ppa .ppa-pdf-cli tr.total td{ background:#DDF3EA !important; }
+  .print-report-ppa .pr-table:not(.ppa-pdf-cli):not(.ppa-pdf-month) th{ background:#1E4FA3; }
+  .print-report-ppa .pr-table:not(.ppa-pdf-cli):not(.ppa-pdf-month) tr.total td{ background:#E3EBF9 !important; color:#153A7A; border-top-color:#1E4FA3; }
+  .print-report-ppa .pr-table:not(.ppa-pdf-cli):not(.ppa-pdf-month) tbody tr:nth-child(even) td{ background:#fff; }
+  .print-report-ppa .pr-table.ppa-pdf-month th{ background:#5E6F65; }
+  .ppa-pdf-extra{ margin:8px 0 2px; padding:8px 12px; }
+  .ppa-pdf-month{ font-size:9px; }
+  .ppa-pdf-month th, .ppa-pdf-month td{ padding:2.5px 7px; }
+  .ppa-p2-notes{ margin:4px 0 6px; font-size:8.5px; line-height:1.45; }
+}
+@media print{
+  .ppa-p1-head{ margin:8mm 0 14mm; padding-bottom:8mm; }
+  .ppa-pdf-band.big{ margin-bottom:14mm; }
+  .ppa-pdf-band.big .ppa-pdf-tile{ min-height:46mm; padding:16px 14px; }
+  .ppa-pdf-band.big .ppa-pdf-flow{ padding:20px 18px; }
+  .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 18px 20px; height:34px; }
+}

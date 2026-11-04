@@ -23,7 +23,7 @@ import {
   noleggioOperativo,
   flussoCassaNoleggio,
 } from "../lib/calc";
-import { pdfDownloadFilename } from "../lib/naming";
+import { pdfDownloadFilename, pdfPpaFilename } from "../lib/naming";
 
 const RATE_NOLEGGIO_OPTIONS = [84, 72, 60];
 
@@ -1969,7 +1969,7 @@ function Dashboard({
       return;
     }
     const titoloOriginale = document.title;
-    document.title = pdfDownloadFilename("Proposta PPA", company.ragioneSociale);
+    document.title = pdfPpaFilename(company.ragioneSociale, kwp, ppaR.durata);
     document.body.dataset.print = "ppa";
     const ripristina = () => {
       document.title = titoloOriginale;
