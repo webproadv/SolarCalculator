@@ -13,6 +13,8 @@ const eur = (v, d = 0) => `€ ${grp(v, d)}`;
 const anniTxt = (v) => grp(v, 1).replace(/,0$/, "");
 
 export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, produzioneKwh, f1BollettaKwh, mensile, pronto }) {
+  const oggi = new Date().toLocaleDateString("it-IT");
+  const numeroDocumento = `PPA-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(company.piva || "").slice(-4)}`;
   const durTxt = anniTxt(r.durata);
   const over = !r.rientraInDurata;
   const tlRientro = over ? 1 : r.anniRientro;
@@ -23,12 +25,50 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
     <div className="print-report print-report-ppa">
       {/* Pagina 1 — solo i KPI principali: vantaggi cliente e vantaggi nostri */}
       <div className="pr-page">
-        <div className="ppa-p1-head">
-          <span className="ppa-p1-kicker">Proposta PPA</span>
+        <div className="pb-top">
+          <div className="pb-brand">
+            <svg viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">
+              <circle cx="16" cy="16" r="6.2" fill="#FBBF24" />
+              {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+                <rect key={a} x="15" y="2.6" width="2" height="4.6" rx="1" fill="#FBBF24" transform={`rotate(${a} 16 16)`} />
+              ))}
+            </svg>
+            <div>
+              <div className="pb-name">Dott. Maurizio Galli</div>
+              <div className="pb-tag">Business Energy Advisor</div>
+            </div>
+          </div>
+          <dl className="pb-doc">
+            <div><dt>Documento</dt><dd>Proposta PPA</dd></div>
+            <div><dt>Rif.</dt><dd>{numeroDocumento}</dd></div>
+            <div><dt>Data emissione</dt><dd>{oggi}</dd></div>
+          </dl>
+        </div>
+
+        <div className="pb-title ppa-pdf-title">
           <h1 className="pr-h1">{company.ragioneSociale}</h1>
-          <p className="ppa-p1-sum">
-            Impianto {kwpTxt} kWp · durata {durTxt} anni · tariffa fissa {eur(r.tariffa, 3)}/kWh · {r.anticipo > 0 ? `anticipo ${eur(r.anticipo)}` : "nessun anticipo"}
-          </p>
+          <span className="pb-sub">Vendita energia — PPA</span>
+        </div>
+
+        <div className="pb-boxes">
+          <section className="pb-box">
+            <h4>Dati cliente</h4>
+            <dl>
+              <dt>Ragione sociale</dt><dd>{company.ragioneSociale}</dd>
+              <dt>Partita IVA</dt><dd>{company.piva}</dd>
+              <dt>Sede / sito</dt><dd>{company.indirizzo}, {company.cap} {company.comune} ({company.provincia})</dd>
+              <dt>Consumo F1 annuo</dt><dd>{grp(f1BollettaKwh)} kWh</dd>
+            </dl>
+          </section>
+          <section className="pb-box ppa-pdf-box">
+            <h4>L&apos;accordo PPA</h4>
+            <dl>
+              <dt>Durata accordo</dt><dd>{durTxt} anni</dd>
+              <dt>Tariffa fissa di vendita</dt><dd>{eur(r.tariffa, 3)}/kWh</dd>
+              <dt>Anticipo cliente</dt><dd>{eur(r.anticipo)}</dd>
+              <dt>Impianto</dt><dd>{kwpTxt} kWp · {grp(produzioneKwh)} kWh/anno</dd>
+            </dl>
+          </section>
         </div>
 
         {!pronto ? (

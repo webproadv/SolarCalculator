@@ -772,3 +772,10 @@ a.btn, a.btn:hover { text-decoration: none; }
   .ppa-pdf-band.big .ppa-pdf-flow{ padding:20px 18px; }
   .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 18px 20px; height:34px; }
 }
+@media print{
+  /* pagina 1 con intestazione brand + dati cliente/accordo: fasce KPI più compatte */
+  .ppa-pdf-band.big{ margin-bottom:9mm; }
+  .ppa-pdf-band.big .ppa-pdf-tile{ min-height:38mm; }
+  .ppa-pdf-band.big .ppa-pdf-flow{ padding:16px; }
+  .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 16px 16px; height:30px; }
+}
