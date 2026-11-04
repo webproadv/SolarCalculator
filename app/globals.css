@@ -779,3 +779,47 @@ a.btn, a.btn:hover { text-decoration: none; }
   .ppa-pdf-band.big .ppa-pdf-flow{ padding:16px; }
   .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 16px 16px; height:30px; }
 }
+
+/* ---- PDF PPA v3: altezza pagina con margine di sicurezza (mai una pagina extra),
+   opportunità F2/F3 in pagina 1 (fascia ambra), grafico e dettagli in pagina 2 ---- */
+@media print{
+  .print-report-ppa .pr-page{ height:284mm; min-height:284mm; max-height:284mm; padding:14mm 15mm 10mm; break-inside:auto; }
+  .print-report-ppa .pr-page:not(:last-child){ break-after:page; }
+  .print-report-ppa .pr-page:last-child{ break-after:avoid; }
+
+  .ppa-pdf-band.extra{ background:#FEF6E4; border-color:#E8CD93; }
+  .ppa-pdf-band.extra .ppa-pdf-band-head{ background:#B8791F; }
+  .ppa-pdf-band.extra .ppa-pdf-tile{ border-color:#E8CD93; }
+  .ppa-pdf-band.extra .ppa-pdf-tile .t{ color:#8A6A2E; }
+  .ppa-pdf-band.extra .ppa-pdf-tile .v{ color:#5A3A08; }
+  .ppa-pdf-band.extra .ppa-pdf-tile.hl{ background:#B8791F; border-color:#B8791F; }
+  .ppa-pdf-band.extra .ppa-pdf-tile.hl .t, .ppa-pdf-band.extra .ppa-pdf-tile.hl .s{ color:#FBEBC8; }
+  .ppa-pdf-band.extra .ppa-pdf-tile.hl .v{ color:#fff; }
+
+  /* pagina 1: compattata per ospitare brand + boxes + 3 fasce */
+  .ppa-pdf-band.big{ margin-bottom:5mm; }
+  .ppa-pdf-band.big .ppa-pdf-band-head{ padding:7px 14px; }
+  .ppa-pdf-band.big .ppa-pdf-flow{ padding:10px 12px; }
+  .ppa-pdf-band.big .ppa-pdf-tile{ min-height:24mm; padding:9px 10px; gap:3px; }
+  .ppa-pdf-band.big .ppa-pdf-tile .v{ font-size:19px; }
+  .ppa-pdf-band.big .ppa-pdf-tile.hl .v{ font-size:24px; }
+  .ppa-pdf-band.big .ppa-pdf-tl{ margin:0 12px 12px; height:26px; }
+  .print-report-ppa .pb-top{ margin-bottom:6px; }
+
+  /* pagina 2 */
+  .ppa-chart-print{ width:100%; height:auto; max-height:none; display:block; }
+  .ppa-pdf-chartpanel{ margin:8px 0 4px; padding:8px 12px 4px; }
+  .print-report-ppa .pr-table td{ padding:6px 10px; }
+  .print-report-ppa .pr-h3{ margin:16px 0 6px; }
+  .ppa-p2-two{ display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+  .ppa-pdf-kv td{ font-size:10px; }
+  .ppa-pdf-kv td:first-child{ width:auto; }
+  .ppa-p2-notes{ margin:14px 0 6px; font-size:9px; line-height:1.5; }
+}
+@media print{
+  .print-report-ppa .pr-table td{ padding:4.5px 10px; }
+  .print-report-ppa .pr-h3{ margin:12px 0 5px; }
+  .ppa-p2-notes{ margin:10px 0 4px; }
+  .ppa-pdf-band.big{ margin-bottom:6.5mm; }
+  .ppa-pdf-band.big .ppa-pdf-tile{ min-height:28mm; }
+}

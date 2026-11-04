@@ -16,11 +16,11 @@ const grp = (v, d = 0) =>
 const eur = (v, d = 0) => `€ ${grp(v, d)}`;
 const anniTxt = (v) => grp(v, 1).replace(/,0$/, "");
 
-export function PpaChart({ r, print = false }) {
+export function PpaChart({ r, print = false, compact = false }) {
   const C = print
     ? { grid: "#D8DCD3", axis: "#7A857D", ink: "#171D1B", ppa: "#1E4FA3", good: "#2F8F5B", crit: "#B33B30", bg: "#FFFFFF" }
     : { grid: "var(--border)", axis: "var(--ink-faint)", ink: "var(--ink)", ppa: "var(--c-ppa)", good: "var(--c-good)", crit: "var(--crit)", bg: "var(--surface)" };
-  const W = 640, H = 220, L = 58, Rm = 40, T = 26, B = 30;
+  const W = 640, H = compact ? 118 : 220, L = 58, Rm = 40, T = compact ? 22 : 26, B = compact ? 22 : 30;
   const rec = r.daRecuperare;
   const durata = r.durata;
   const yMin = -rec;
@@ -33,7 +33,7 @@ export function PpaChart({ r, print = false }) {
   const step = durata > 8 ? 2 : 1;
   const xt = [];
   for (let t = 0; t <= durata + 0.001; t += step) xt.push(t);
-  const yt = [0, 1, 2, 3, 4].map((i) => yMin + ((yMax - yMin) * i) / 4);
+  const yt = (compact ? [0, 1, 2] : [0, 1, 2, 3, 4]).map((i) => yMin + ((yMax - yMin) * i) / (compact ? 2 : 4));
   const k = (v) => `${(v / 1000).toLocaleString("it-IT", { maximumFractionDigits: 1 })}k`;
   return (
     <svg className={print ? "ppa-chart ppa-chart-print" : "ppa-chart"} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Posizione cumulata dell'investimento nel tempo">
@@ -45,7 +45,7 @@ export function PpaChart({ r, print = false }) {
       ))}
       <line x1={L} x2={W - Rm} y1={y(0)} y2={y(0)} stroke={C.axis} strokeWidth="1.5" strokeDasharray="4 3" />
       {xt.map((t) => (
-        <text key={t} x={x(t)} y={H - 10} textAnchor="middle">{t}</text>
+        <text key={t} x={x(t)} y={H - (compact ? 6 : 10)} textAnchor="middle">{t}</text>
       ))}
       <polyline fill="none" stroke={inside ? C.ppa : C.crit} strokeWidth="3" points={`${x(0)},${y(val(0))} ${x(tb)},${y(val(tb))}`} />
       {inside && (

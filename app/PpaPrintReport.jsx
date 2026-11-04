@@ -1,5 +1,7 @@
 "use client";
 
+import { PpaChart } from "./PpaSection";
+
 // PDF "Proposta PPA" — stesso stile "bolletta" del PDF di analisi energetica
 // (classi pb-*/pr-*), ma con una sola ragione d'essere: mostrare a colpo
 // d'occhio i vantaggi lato cliente e lato nostro della vendita di energia in
@@ -147,18 +149,55 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
                 )}
               </div>
             </section>
+
+            {/* OPPORTUNITÀ AGGIUNTIVA — energia diurna in F2/F3, fuori dai calcoli */}
+            <section className="ppa-pdf-band extra big">
+              <div className="ppa-pdf-band-head">
+                <b>Opportunità aggiuntiva — energia diurna in F2 e F3</b>
+                <span>Non inclusa nei calcoli</span>
+              </div>
+              <div className="ppa-pdf-flow four">
+                <div className="ppa-pdf-tile">
+                  <span className="t">Energia diurna F2/F3</span>
+                  <span className="v">{grp(r.extraF23Kwh)} kWh</span>
+                  <span className="s">vendibile all&apos;anno</span>
+                </div>
+                <div className="ppa-pdf-tile">
+                  <span className="t">Margine per kWh</span>
+                  <span className="v">{eur(r.extraF23Margine, 3)}</span>
+                  <span className="s">tariffa di vendita − GSE</span>
+                </div>
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Guadagno aggiuntivo annuo</span>
+                  <span className="v">{eur(r.extraF23Annuo)}</span>
+                  <span className="s">all&apos;anno</span>
+                </div>
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Guadagno aggiuntivo totale</span>
+                  <span className="v">{eur(r.extraF23Totale)}</span>
+                  <span className="s">su {durTxt} anni</span>
+                </div>
+              </div>
+            </section>
           </>
         )}
 
         <div className="ppa-pageno">Pagina 1 di 2</div>
       </div>
 
-      {/* Pagina 2 — dettagli delle voci e calcoli */}
+      {/* Pagina 2 — grafico (compatto, a tutta larghezza) e dettaglio delle voci */}
       <div className="pr-page">
         <h2 className="pr-h2">Dettaglio e calcoli</h2>
         <p className="ppa-p2-sub">
           {company.ragioneSociale}{company.piva ? ` · P.IVA ${company.piva}` : ""} · impianto {kwpTxt} kWp · {grp(produzioneKwh)} kWh/anno · consumo F1 {grp(f1BollettaKwh)} kWh/anno
         </p>
+
+        {pronto && (
+          <div className="pb-panel ppa-pdf-chartpanel">
+            <h4>Rientro e guadagno nel tempo <span>{durTxt} anni · valori in migliaia di €</span></h4>
+            <PpaChart r={r} print compact />
+          </div>
+        )}
 
         {pronto && (
           <>
@@ -187,51 +226,43 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
               </tbody>
             </table>
 
-            <div className="ppa-pdf-extra">
-              <div className="ppa-pdf-extra-head">
-                <b>Opportunità aggiuntiva — energia diurna in F2 e F3</b>
-                <span>Non inclusa nei calcoli</span>
+            <div className="ppa-p2-two">
+              <div>
+                <h3 className="pr-h3">Dati dell&apos;operazione</h3>
+                <table className="pr-table ppa-pdf-kv">
+                  <tbody>
+                    <tr><td>Costo effettivo impianto</td><td className="num">{eur(r.costo)}</td></tr>
+                    <tr><td>Anticipo del cliente</td><td className="num">{eur(r.anticipo)}</td></tr>
+                    <tr><td>Da recuperare</td><td className="num">{eur(r.daRecuperare)}</td></tr>
+                    <tr><td>Durata accordo</td><td className="num">{durTxt} anni</td></tr>
+                    <tr><td>Tariffa fissa di vendita</td><td className="num">{eur(r.tariffa, 3)}/kWh</td></tr>
+                    <tr><td>Tariffa minima per rientrare in {durTxt} anni</td><td className="num">{eur(r.tariffaMinima, 3)}/kWh</td></tr>
+                    <tr><td>Tariffa GSE</td><td className="num">{eur(r.tariffaGse, 3)}/kWh</td></tr>
+                    <tr><td>Prezzo medio pagato oggi dal cliente</td><td className="num">{prezzoMedio > 0 ? `${eur(prezzoMedio, 3)}/kWh` : "—"}</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <div className="ppa-pdf-extra-body">
-                <div><span>Energia diurna F2/F3 vendibile</span><b>{grp(r.extraF23Kwh)} kWh/anno</b></div>
-                <div><span>Tariffa di vendita − tariffa GSE</span><b>{eur(r.extraF23Margine, 3)}/kWh</b></div>
-                <div><span>Guadagno aggiuntivo annuo</span><b>{eur(r.extraF23Annuo)}</b></div>
-                <div><span>Guadagno aggiuntivo su {durTxt} anni</span><b>{eur(r.extraF23Totale)}</b></div>
+              <div>
+                <h3 className="pr-h3">Energia annua (kWh)</h3>
+                <table className="pr-table ppa-pdf-kv">
+                  <tbody>
+                    <tr><td>Produzione impianto ({kwpTxt} kWp)</td><td className="num">{grp(produzioneKwh)}</td></tr>
+                    <tr><td>Consumo F1 in bolletta</td><td className="num">{grp(f1BollettaKwh)}</td></tr>
+                    <tr><td>F1 venduto al cliente</td><td className="num">{grp(r.f1Kwh)}</td></tr>
+                    <tr><td>Immessa e ritirata dal GSE</td><td className="num">{grp(r.immessoKwh)}</td></tr>
+                    <tr><td>Energia diurna F2/F3 (opportunità)</td><td className="num">{grp(r.extraF23Kwh)}</td></tr>
+                    <tr><td>Margine opportunità (vendita − GSE)</td><td className="num">{eur(r.extraF23Margine, 3)}/kWh</td></tr>
+                    <tr><td>Guadagno aggiuntivo annuo</td><td className="num">{eur(r.extraF23Annuo)}</td></tr>
+                    <tr><td>Guadagno aggiuntivo su {durTxt} anni</td><td className="num">{eur(r.extraF23Totale)}</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </>
         )}
 
-        <h3 className="pr-h3">Dettaglio mensile — energia F1 vendibile al cliente (kWh)</h3>
-        {Array.isArray(mensile) && mensile.length === 12 && (
-          <table className="pr-table ppa-pdf-month">
-            <thead>
-              <tr><th>Mese</th><th className="num">Produzione</th><th className="num">Consumo F1</th><th className="num">F1 venduto</th><th className="num">Diurno F2/F3</th><th className="num">Immesso GSE</th></tr>
-            </thead>
-            <tbody>
-              {mensile.map((m) => (
-                <tr key={m.mese}>
-                  <td>{m.mese}</td>
-                  <td className="num">{grp(m.produzione)}</td>
-                  <td className="num">{grp(m.f1)}</td>
-                  <td className="num">{grp(m.venduto)}{m.f1 > m.produzione ? " *" : ""}</td>
-                  <td className="num">{grp(m.extraF23 || 0)}</td>
-                  <td className="num">{grp(Math.max(0, m.produzione - m.venduto))}</td>
-                </tr>
-              ))}
-              <tr className="total">
-                <td>Totale</td>
-                <td className="num">{grp(mensile.reduce((s, m) => s + m.produzione, 0))}</td>
-                <td className="num">{grp(mensile.reduce((s, m) => s + m.f1, 0))}</td>
-                <td className="num">{grp(mensile.reduce((s, m) => s + m.venduto, 0))}</td>
-                <td className="num">{grp(mensile.reduce((s, m) => s + (m.extraF23 || 0), 0))}</td>
-                <td className="num">{grp(mensile.reduce((s, m) => s + Math.max(0, m.produzione - m.venduto), 0))}</td>
-              </tr>
-            </tbody>
-          </table>
-        )}
         <p className="pr-note ppa-p2-notes">
-          * Mese in cui il consumo F1 supera la produzione: si vende solo la produzione. F1 venduto = somma dei 12 mesi del minore tra produzione e consumo F1 in bolletta; immissione GSE = produzione − F1 venduto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno totale = ((ricavo totale ÷ costo effettivo impianto) − 1) × 100; ritorno annuo = ritorno totale ÷ anni dell&apos;accordo. Valori IVA esclusa, indicativi e non vincolanti.
+          Energia F1 venduta = somma dei 12 mesi del minore tra produzione dell&apos;impianto e consumo F1 in bolletta; immissione GSE = produzione − F1 venduta. Opportunità F2/F3: energia diurna oltre F1 × (tariffa di vendita − tariffa GSE), esclusa da rientro, ricavi, ritorno e guadagno netto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno totale = ((ricavo totale ÷ costo effettivo impianto) − 1) × 100; ritorno annuo = ritorno totale ÷ anni dell&apos;accordo. Valori IVA esclusa, indicativi e non vincolanti.
         </p>
 
         <div className="ppa-pageno">Pagina 2 di 2</div>
