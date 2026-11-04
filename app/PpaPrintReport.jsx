@@ -170,12 +170,12 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
               </div>
               <div className="ppa-pdf-extra-body">
                 <div><span>Energia diurna F2/F3 vendibile</span><b>{grp(r.extraF23Kwh)} kWh/anno</b></div>
-                <div><span>Nostra tariffa di vendita</span><b>{eur(r.tariffa, 3)}/kWh</b></div>
+                <div><span>Tariffa di vendita − tariffa GSE</span><b>{eur(r.extraF23Margine, 3)}/kWh</b></div>
                 <div><span>Guadagno aggiuntivo annuo</span><b>{eur(r.extraF23Annuo)}</b></div>
                 <div><span>Guadagno aggiuntivo su {durTxt} anni</span><b>{eur(r.extraF23Totale)}</b></div>
               </div>
               <p className="pr-note" style={{ margin: "6px 0 0" }}>
-                Valore informativo: non entra in rientro, ricavi, ritorno dell&apos;investimento e guadagno netto. Gli stessi kWh sono già conteggiati come immissione GSE nel dettaglio sopra.
+                Valore informativo: non entra in rientro, ricavi, ritorno dell&apos;investimento e guadagno netto. Gli stessi kWh sono già pagati dal GSE nel dettaglio sopra, quindi si valorizza solo la differenza tra tariffa di vendita e tariffa GSE.
               </p>
             </div>
           </>

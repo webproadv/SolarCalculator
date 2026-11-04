@@ -298,12 +298,12 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
           </div>
           <div className="ppa-grid4" style={{ marginTop: 10 }}>
             <div className="ppa-kpi"><div className="v">{grp(r.extraF23Kwh)} kWh</div><div className="l">Energia diurna F2/F3 vendibile<br />(annua)</div></div>
-            <div className="ppa-kpi"><div className="v">{eur(r.tariffa, 3)}</div><div className="l">Nostra tariffa di vendita<br />(€/kWh)</div></div>
+            <div className="ppa-kpi"><div className="v">{eur(r.extraF23Margine, 3)}</div><div className="l">Tariffa di vendita {grp(r.tariffa, 3)} − GSE {grp(r.tariffaGse, 3)}<br />(€/kWh)</div></div>
             <div className="ppa-kpi good"><div className="v">{eur(r.extraF23Annuo)}</div><div className="l">Guadagno aggiuntivo<br />annuo</div></div>
             <div className="ppa-kpi good"><div className="v">{eur(r.extraF23Totale)}</div><div className="l">Guadagno aggiuntivo<br />su {durTxt} anni</div></div>
           </div>
           <p className="hint">
-            Consumo diurno del cliente (stessa formula del bilancio diurno/notturno, in base ai giorni lavorativi) meno la fascia F1 già venduta, mese per mese e comunque entro la produzione residua dell&apos;impianto. Valore informativo: non entra in rientro, ricavi, ritorno dell&apos;investimento e guadagno netto. Attenzione: questi kWh sono già conteggiati come immissione GSE nei calcoli principali; rispetto al GSE l&apos;incremento netto sarebbe di {eur(r.extraF23NettoVsGseAnnuo)} all&apos;anno.
+            Consumo diurno del cliente (stessa formula del bilancio diurno/notturno, in base ai giorni lavorativi) meno la fascia F1 già venduta, mese per mese e comunque entro la produzione residua dell&apos;impianto. Questi kWh sono già pagati dal GSE nei calcoli principali, quindi si valorizza solo la differenza: energia diurna F2/F3 × (tariffa di vendita − tariffa GSE). Valore informativo: non entra in rientro, ricavi, ritorno dell&apos;investimento e guadagno netto.
           </p>
         </div>
       )}
