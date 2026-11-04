@@ -113,7 +113,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
             <section className="ppa-pdf-band noi">
               <div className="ppa-pdf-band-head">
                 <b>Vantaggi per noi</b>
-                <span>Investimento da recuperare {eur(r.daRecuperare)} · ritorno annuo {r.roiAnnuoPct != null ? `${grp(r.roiAnnuoPct, 1)} %` : "—"} · ritorno totale {r.roiTotalePct != null ? `${grp(r.roiTotalePct, 0)} %` : "—"}</span>
+                <span>Investimento da recuperare {eur(r.daRecuperare)} · costo effettivo impianto {eur(r.costo)}</span>
               </div>
               <div className="ppa-pdf-flow four">
                 <div className="ppa-pdf-tile">
@@ -131,10 +131,22 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
                   <span className="v">{eur(r.ricavoTotale)}</span>
                   <span className="s">su {durTxt} anni</span>
                 </div>
-                <div className="ppa-pdf-tile hl">
+                <div className="ppa-pdf-tile">
                   <span className="t">Guadagno netto</span>
                   <span className="v">{eur(r.guadagnoNetto)}</span>
                   <span className="s">a fine accordo</span>
+                </div>
+              </div>
+              <div className="ppa-pdf-roi">
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Ritorno totale dell&apos;investimento</span>
+                  <span className="v">{r.roiTotalePct != null ? `${grp(r.roiTotalePct, 1)} %` : "—"}</span>
+                  <span className="s">(ricavo totale ÷ spese − 1) × 100 · su {durTxt} anni</span>
+                </div>
+                <div className="ppa-pdf-tile hl">
+                  <span className="t">Ritorno annuo dell&apos;investimento</span>
+                  <span className="v">{r.roiAnnuoPct != null ? `${grp(r.roiAnnuoPct, 1)} %` : "—"}</span>
+                  <span className="s">ritorno totale ÷ {durTxt} anni</span>
                 </div>
               </div>
             </section>
@@ -156,15 +168,11 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
           </>
         )}
 
-        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 1 di 2</span></div>
+        <div className="pr-footer"><span>Proposta PPA — {company.ragioneSociale}</span><span>Pagina 1 di 2</span></div>
       </div>
 
       {/* Pagina 2 — dettaglio economico, opportunità aggiuntiva, dettaglio mensile */}
       <div className="pr-page">
-        <div className="pr-running-header">
-          <span>Proposta PPA — {company.ragioneSociale}</span>
-          <span>{numeroDocumento}</span>
-        </div>
         <h2 className="pr-h2"><span className="pr-section-tag ppa-pdf-tag">F</span>Dettaglio economico</h2>
 
         {pronto && (
@@ -228,7 +236,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
           </table>
         )}
         <p className="pr-note">
-          * Mese in cui il consumo F1 supera la produzione: si vende solo la produzione. Energia F1 venduta = somma dei 12 mesi del minore tra produzione dell&apos;impianto e consumo F1 in bolletta; immissione GSE = produzione − F1 venduto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno annuo/totale = ricavo ÷ costo effettivo impianto. Valori IVA esclusa, indicativi e non vincolanti.
+          * Mese in cui il consumo F1 supera la produzione: si vende solo la produzione. Energia F1 venduta = somma dei 12 mesi del minore tra produzione dell&apos;impianto e consumo F1 in bolletta; immissione GSE = produzione − F1 venduto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno totale = ((ricavo totale ÷ spese) − 1) × 100; ritorno annuo = ritorno totale ÷ anni dell&apos;accordo (spese = costo effettivo impianto). Valori IVA esclusa, indicativi e non vincolanti.
         </p>
 
         <div className="pr-contact">
@@ -239,7 +247,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
           </div>
         </div>
 
-        <div className="pr-footer"><span>Dott. Maurizio Galli — Business Energy Advisor</span><span>Pagina 2 di 2</span></div>
+        <div className="pr-footer"><span>Proposta PPA — {company.ragioneSociale}</span><span>Pagina 2 di 2</span></div>
       </div>
     </div>
   );

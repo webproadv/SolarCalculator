@@ -701,3 +701,17 @@ a.btn, a.btn:hover { text-decoration: none; }
 @media print{
   .ppa-pdf-tl .rientro{ background:#1E4FA3; }
 }
+
+/* ---- Ritorno dell'investimento in evidenza ---- */
+.ppa-roi{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+@media (max-width:560px){ .ppa-roi{ grid-template-columns:1fr; } }
+.ppa-roi-box{ background:linear-gradient(120deg, #1E4FA3, #173F85); color:#fff; border-radius:14px; padding:16px 18px; }
+.ppa-roi-box .l{ font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; opacity:.9; }
+.ppa-roi-box .v{ font-family:"IBM Plex Mono"; font-weight:700; font-size:34px; line-height:1.15; margin-top:4px; }
+.ppa-roi-box .s{ font-size:12px; opacity:.85; margin-top:4px; }
+@media print{
+  .ppa-pdf-roi{ display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 12px 12px; }
+  .ppa-pdf-roi .ppa-pdf-tile.hl .v{ font-size:26px; }
+  .ppa-chart-print{ max-height:52mm; }
+  .print-report-ppa .pr-footer{ border-top:1px solid #D8DCD3; }
+}

@@ -201,6 +201,21 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
       </div>
 
       {pronto && (
+        <div className="ppa-roi">
+          <div className="ppa-roi-box">
+            <div className="l">Ritorno totale dell&apos;investimento</div>
+            <div className="v">{r.roiTotalePct != null ? `${grp(r.roiTotalePct, 1)} %` : "—"}</div>
+            <div className="s">((ricavo totale {eur(r.ricavoTotale)} ÷ spese {eur(r.costo)}) − 1) × 100</div>
+          </div>
+          <div className="ppa-roi-box">
+            <div className="l">Ritorno annuo dell&apos;investimento</div>
+            <div className="v">{r.roiAnnuoPct != null ? `${grp(r.roiAnnuoPct, 1)} %` : "—"}</div>
+            <div className="s">ritorno totale ÷ {durTxt} anni</div>
+          </div>
+        </div>
+      )}
+
+      {pronto && (
         <div className="card" style={{ marginTop: 14 }}>
           <h3>Durata dell&apos;accordo: rientro e guadagno</h3>
           <div className="card-note">
@@ -270,9 +285,8 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
             <div className="card">
               <h3>Ritorno dell&apos;investimento</h3>
               <div className="card-note">Ricavo ÷ costo effettivo impianto</div>
-              <div className="ppa-row"><span>Ritorno annuo</span><b>{grp(r.roiAnnuoPct, 1)} %</b></div>
-              <div className="ppa-row"><span>Ritorno totale ({durTxt} anni)</span><b>{grp(r.roiTotalePct, 1)} %</b></div>
-              <div className="ppa-row"><span>Guadagno netto su costo effettivo</span><b>{grp(r.guadagnoNettoPct, 1)} %</b></div>
+              <div className="ppa-row hl"><span>Ritorno totale ({durTxt} anni)<small>((ricavo totale ÷ spese) − 1) × 100</small></span><b>{grp(r.roiTotalePct, 1)} %</b></div>
+              <div className="ppa-row hl"><span>Ritorno annuo<small>ritorno totale ÷ {durTxt} anni</small></span><b>{grp(r.roiAnnuoPct, 1)} %</b></div>
               {r.spesaAnnuaNetta > 0 && r.spesaDuranteAnnua != null && (
                 <>
                   <h3 style={{ marginTop: 16 }}>Lato cliente — spesa in bolletta</h3>
