@@ -1971,9 +1971,17 @@ function Dashboard({
     const titoloOriginale = document.title;
     document.title = pdfPpaFilename(company.ragioneSociale, kwp, ppaR.durata);
     document.body.dataset.print = "ppa";
+    // Margine di pagina 0 SOLO per questa stampa (così Chrome non scrive URL/data/titolo
+    // nei margini); i margini veri sono il padding di .pr-page. Si usa un @page globale
+    // temporaneo e non una pagina nominata: una pagina nominata fa inserire a Chrome
+    // un salto pagina prima del report e la prima pagina esce vuota.
+    const stilePagina = document.createElement("style");
+    stilePagina.textContent = "@page{ size:A4; margin:0; }";
+    document.head.appendChild(stilePagina);
     const ripristina = () => {
       document.title = titoloOriginale;
       delete document.body.dataset.print;
+      stilePagina.remove();
       window.removeEventListener("afterprint", ripristina);
     };
     window.addEventListener("afterprint", ripristina);

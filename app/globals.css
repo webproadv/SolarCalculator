@@ -719,9 +719,7 @@ a.btn, a.btn:hover { text-decoration: none; }
 /* ---- PDF PPA semplificato (approvazione): pagina 1 = KPI principali, pagina 2 = dettagli.
    Nessuna intestazione/piè di pagina: solo numero pagina. Pagina nominata "ppa" con
    margine 0 → Chrome non stampa URL/data/titolo; i margini sono il padding di .pr-page. ---- */
-@page ppa{ size:A4; margin:0; }
 @media print{
-  .print-report-ppa{ page:ppa; }
   .print-report-ppa .pr-page{
     box-sizing:border-box; width:210mm; height:296mm; min-height:296mm; max-height:296mm;
     padding:16mm 15mm 14mm; overflow:hidden; break-inside:avoid;
@@ -822,4 +820,8 @@ a.btn, a.btn:hover { text-decoration: none; }
   .ppa-p2-notes{ margin:10px 0 4px; }
   .ppa-pdf-band.big{ margin-bottom:6.5mm; }
   .ppa-pdf-band.big .ppa-pdf-tile{ min-height:28mm; }
+}
+@media print{
+  body[data-print="ppa"]{ margin:0 !important; padding:0 !important; min-height:0 !important; height:auto !important; }
+  body[data-print="ppa"] .wrap{ min-height:0 !important; height:auto !important; }
 }
