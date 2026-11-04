@@ -8,6 +8,8 @@ import SatellitePreviewMap from "./SatellitePreviewMap";
 import OrientamentoDial from "./OrientamentoDial";
 import RoofPlanner from "./RoofPlanner";
 import PpaSection from "./PpaSection";
+import PpaPrintReport from "./PpaPrintReport";
+import { calcolaPpa, PPA_DEFAULTS } from "../lib/ppa";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -1636,6 +1638,18 @@ function Dashboard({
   // Sezione F (PPA): visibile solo quando l'utente preme il bottone "PPA" in
   // fondo alla dashboard.
   const [ppaOpen, setPpaOpen] = useState(false);
+  // Dati inseriti nella Sezione F (sollevati qui perché servono anche al
+  // PDF "PPA" nella barra dei bottoni).
+  const [ppaIn, setPpaIn] = useState({
+    modo: 2, // 2 = anni → tariffa (configurazione ottimale); 1 = tariffa → anni
+    costo: "",
+    anticipo: "0",
+    tariffa: "",
+    durata: String(PPA_DEFAULTS.durataAnni),
+    anni: String(PPA_DEFAULTS.anniRientro),
+    gse: String(PPA_DEFAULTS.tariffaGse),
+  });
+  const [ppaPdfError, setPpaPdfError] = useState("");
 
   // Esportazione "CSV Noleggio" / "PDF Noleggio" (stesso formato dati,
   // richiesto dal partner Alaska: vedi buildAlaskaCsv/buildAlaskaFieldMap).
@@ -1896,9 +1910,53 @@ function Dashboard({
   const ppaMensile = MESI_BREVI.map((mese, i) => {
     const produzione = Math.round(monthlyProduction[i] || 0);
     const f1 = Math.round(f1Mensile[i] || 0);
-    return { mese, produzione, f1, venduto: Math.min(produzione, f1) };
+    const venduto = Math.min(produzione, f1);
+    // Energia diurna in F2/F3 (a parte, NON nei calcoli principali): consumo
+    // diurno del mese (stessa formula del bilancio diurno/notturno) meno la
+    // fascia F1, al massimo pari alla produzione che resta dopo la vendita F1.
+    const extraF23 = Math.max(0, Math.min(Math.round((monthlyDiurno[i] || 0) - f1), produzione - venduto));
+    return { mese, produzione, f1, venduto, extraF23 };
   });
-  const ppaAutoconsumoF1Kwh = ppaMensile.reduce((s, m) => s + m.venduto, 0);
+  const ppaExtraF23Kwh = ppaMensile.reduce((s, m) => s + m.extraF23, 0);
+  const ppaR = calcolaPpa({
+    modo: ppaIn.modo,
+    costo: ppaIn.costo,
+    anticipo: ppaIn.anticipo,
+    tariffa: ppaIn.tariffa,
+    durata: ppaIn.durata,
+    anniRientro: ppaIn.anni,
+    tariffaGse: ppaIn.gse,
+    f1Kwh: ppaMensile.reduce((s, m) => s + m.venduto, 0),
+    immessoKwh: Math.max(0, produzioneAnnuaTotaleKwh - ppaMensile.reduce((s, m) => s + m.venduto, 0)),
+    prezzoAttuale: econ.prezzoMedio,
+    energiaF23Kwh: ppaExtraF23Kwh,
+    spesaAnnuaNetta: econ.spesaAnnuaNetta,
+  });
+  const ppaPronto = ppaR.costo > 0;
+
+  // "📄 PPA": stampa/salva in PDF il documento "Proposta PPA" (stesso
+  // meccanismo di handleStampa, ma con body[data-print="ppa"] che mostra il
+  // report PPA al posto dell'analisi energetica).
+  function handleStampaPpa() {
+    setPpaPdfError("");
+    if (!ppaPronto) {
+      setPpaOpen(true);
+      setPpaPdfError("Inserisci il costo effettivo dell'impianto nella Sezione F (PPA) prima di creare il PDF.");
+      setTimeout(() => document.getElementById("f")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      return;
+    }
+    const titoloOriginale = document.title;
+    document.title = pdfDownloadFilename("Proposta PPA", company.ragioneSociale);
+    document.body.dataset.print = "ppa";
+    const ripristina = () => {
+      document.title = titoloOriginale;
+      delete document.body.dataset.print;
+      window.removeEventListener("afterprint", ripristina);
+    };
+    window.addEventListener("afterprint", ripristina);
+    window.setTimeout(ripristina, 60000);
+    window.print();
+  }
   const ppaF1BollettaKwh = ppaMensile.reduce((s, m) => s + m.f1, 0);
   const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
   const econ = economics({
@@ -1987,6 +2045,9 @@ function Dashboard({
           {pdfAcquistoLoading && <span className="spinner" />}
           📄 Acquisto
         </button>
+        <button className="btn btn-ghost" onClick={handleStampaPpa} title="PDF Proposta PPA: vantaggi per il cliente e per noi">
+          📄 PPA
+        </button>
         {String(company.piva || "").replace(/\D/g, "").length === 11 && (
           <a
             className="btn btn-ghost"
@@ -2003,6 +2064,7 @@ function Dashboard({
         {saveState.status === "done" && <span className="save-feedback good">{saveState.message}</span>}
         {saveState.status === "error" && <span className="save-feedback error">{saveState.message}</span>}
         {noleggioError && <span className="save-feedback error">{noleggioError}</span>}
+        {ppaPdfError && !ppaPronto && <span className="save-feedback error">{ppaPdfError}</span>}
       </div>
 
       {showAlaskaModal && (
@@ -2505,8 +2567,10 @@ function Dashboard({
 
       {ppaOpen && (
         <PpaSection
+          inp={ppaIn}
+          setInp={setPpaIn}
+          r={ppaR}
           produzioneKwh={produzioneAnnuaTotaleKwh}
-          autoconsumoF1Kwh={ppaAutoconsumoF1Kwh}
           f1BollettaKwh={ppaF1BollettaKwh}
           mensile={ppaMensile}
           prezzoMedio={econ.prezzoMedio}
@@ -2545,6 +2609,18 @@ function Dashboard({
         flusso={flusso}
         bollettaMensile={bollettaMensile}
         posa={posa}
+      />
+
+      <PpaPrintReport
+        company={company}
+        quote={quote}
+        r={ppaR}
+        pronto={ppaPronto}
+        prezzoMedio={econ.prezzoMedio}
+        kwp={kwp}
+        produzioneKwh={produzioneAnnuaTotaleKwh}
+        f1BollettaKwh={ppaF1BollettaKwh}
+        mensile={ppaMensile}
       />
     </div>
   );

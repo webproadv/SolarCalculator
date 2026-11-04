@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { calcolaPpa, PPA_DEFAULTS } from "../lib/ppa";
+import { PPA_DEFAULTS } from "../lib/ppa";
 
 // Sezione F — Vendita energia in modalità PPA (vedi lib/ppa.js per le formule).
 // Dati automatici dall'analisi (produzione, autoconsumo F1, prezzo medio) in
@@ -17,7 +16,10 @@ const grp = (v, d = 0) =>
 const eur = (v, d = 0) => `€ ${grp(v, d)}`;
 const anniTxt = (v) => grp(v, 1).replace(/,0$/, "");
 
-function PpaChart({ r }) {
+export function PpaChart({ r, print = false }) {
+  const C = print
+    ? { grid: "#D8DCD3", axis: "#7A857D", ink: "#171D1B", ppa: "#0E7C86", good: "#2F8F5B", crit: "#B33B30", bg: "#FFFFFF" }
+    : { grid: "var(--border)", axis: "var(--ink-faint)", ink: "var(--ink)", ppa: "var(--c-ppa)", good: "var(--c-good)", crit: "var(--crit)", bg: "var(--surface)" };
   const W = 640, H = 220, L = 58, Rm = 40, T = 26, B = 30;
   const rec = r.daRecuperare;
   const durata = r.durata;
@@ -34,48 +36,40 @@ function PpaChart({ r }) {
   const yt = [0, 1, 2, 3, 4].map((i) => yMin + ((yMax - yMin) * i) / 4);
   const k = (v) => `${(v / 1000).toLocaleString("it-IT", { maximumFractionDigits: 1 })}k`;
   return (
-    <svg className="ppa-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Posizione cumulata dell'investimento nel tempo">
+    <svg className={print ? "ppa-chart ppa-chart-print" : "ppa-chart"} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Posizione cumulata dell'investimento nel tempo">
       {yt.map((v, i) => (
         <g key={i}>
-          <line x1={L} x2={W - Rm} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth="1" />
+          <line x1={L} x2={W - Rm} y1={y(v)} y2={y(v)} stroke={C.grid} strokeWidth="1" />
           <text x={L - 6} y={y(v) + 4} textAnchor="end">{k(v)}</text>
         </g>
       ))}
-      <line x1={L} x2={W - Rm} y1={y(0)} y2={y(0)} stroke="var(--ink-faint)" strokeWidth="1.5" strokeDasharray="4 3" />
+      <line x1={L} x2={W - Rm} y1={y(0)} y2={y(0)} stroke={C.axis} strokeWidth="1.5" strokeDasharray="4 3" />
       {xt.map((t) => (
         <text key={t} x={x(t)} y={H - 10} textAnchor="middle">{t}</text>
       ))}
-      <polyline fill="none" stroke={inside ? "var(--c-ppa)" : "var(--crit)"} strokeWidth="3" points={`${x(0)},${y(val(0))} ${x(tb)},${y(val(tb))}`} />
+      <polyline fill="none" stroke={inside ? C.ppa : C.crit} strokeWidth="3" points={`${x(0)},${y(val(0))} ${x(tb)},${y(val(tb))}`} />
       {inside && (
         <>
-          <polyline fill="none" stroke="var(--c-good)" strokeWidth="3" points={`${x(tb)},${y(0)} ${x(durata)},${y(val(durata))}`} />
-          <circle cx={x(tb)} cy={y(0)} r="5" fill="var(--surface)" stroke="var(--ink)" strokeWidth="2" />
-          <text x={x(tb)} y={y(0) - 10} textAnchor="middle" style={{ fill: "var(--ink)", fontWeight: 700 }}>pareggio {anniTxt(tb)} anni</text>
+          <polyline fill="none" stroke={C.good} strokeWidth="3" points={`${x(tb)},${y(0)} ${x(durata)},${y(val(durata))}`} />
+          <circle cx={x(tb)} cy={y(0)} r="5" fill={C.bg} stroke={C.ink} strokeWidth="2" />
+          <text x={x(tb)} y={y(0) - 10} textAnchor="middle" style={{ fill: C.ink, fontWeight: 700 }}>pareggio {anniTxt(tb)} anni</text>
         </>
       )}
-      <circle cx={x(0)} cy={y(val(0))} r="4" fill="var(--c-ppa)" />
-      <text x={L + 8} y={y(val(0)) - 8} style={{ fill: "var(--ink)" }}>investimento −{k(rec)}</text>
-      <text x={W - Rm} y={y(val(durata)) - 8} textAnchor="end" style={{ fill: "var(--ink)", fontWeight: 700 }}>{k(val(durata))}</text>
+      <circle cx={x(0)} cy={y(val(0))} r="4" fill={C.ppa} />
+      <text x={L + 8} y={y(val(0)) - 8} style={{ fill: C.ink }}>investimento −{k(rec)}</text>
+      <text x={W - Rm} y={y(val(durata)) - 8} textAnchor="end" style={{ fill: C.ink, fontWeight: 700 }}>{k(val(durata))}</text>
     </svg>
   );
 }
 
-export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1BollettaKwh, mensile, prezzoMedio, costoListino }) {
-  const [modo, setModo] = useState(2); // 2 = anni → tariffa (configurazione ottimale)
-  const [costo, setCosto] = useState("");
-  const [anticipo, setAnticipo] = useState("0");
-  const [tariffa, setTariffa] = useState("");
-  const [durata, setDurata] = useState(String(PPA_DEFAULTS.durataAnni));
-  const [anni, setAnni] = useState(String(PPA_DEFAULTS.anniRientro));
-  const [gse, setGse] = useState(String(PPA_DEFAULTS.tariffaGse));
+export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKwh, mensile, prezzoMedio, costoListino }) {
+  const { modo, costo, anticipo, tariffa, durata, anni, gse } = inp;
+  const mk = (k) => (v) => setInp((p) => ({ ...p, [k]: v }));
+  const setModo = mk("modo"), setCosto = mk("costo"), setAnticipo = mk("anticipo"), setTariffa = mk("tariffa");
+  const setDurata = mk("durata"), setAnni = mk("anni"), setGse = mk("gse");
 
-  const f1Kwh = Math.max(0, Math.round(autoconsumoF1Kwh || 0));
-  const immessoKwh = Math.max(0, Math.round((produzioneKwh || 0) - f1Kwh));
-
-  const r = calcolaPpa({
-    modo, costo, anticipo, tariffa, durata, anniRientro: anni,
-    tariffaGse: gse, f1Kwh, immessoKwh, prezzoAttuale: prezzoMedio,
-  });
+  const f1Kwh = r.f1Kwh;
+  const immessoKwh = r.immessoKwh;
   const pronto = r.costo > 0 && r.daRecuperare >= 0;
   const durTxt = anniTxt(r.durata);
 
@@ -283,9 +277,12 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1Bolletta
                 <>
                   <h3 style={{ marginTop: 16 }}>Lato cliente</h3>
                   <div className="card-note">Perché il cliente accetta</div>
-                  <div className="ppa-row"><span>Tariffa PPA vs prezzo medio attuale ({grp(prezzoMedio, 3)})</span><b>{r.scontoPct >= 0 ? "−" : "+"}{grp(Math.abs(r.scontoPct), 1)} %</b></div>
+                  <div className="ppa-row hl"><span>Risparmio in bolletta sulla quota energia venduta da noi<small>prezzo attuale € {grp(prezzoMedio, 3)} → PPA € {grp(r.tariffa, 3)}/kWh</small></span><b>{r.scontoPct >= 0 ? "−" : "+"}{grp(Math.abs(r.scontoPct), 1)} %</b></div>
                   <div className="ppa-row"><span>Risparmio annuo sull&apos;energia F1</span><b>{eur(r.risparmioAnnuoCliente)}</b></div>
                   <div className="ppa-row"><span>Risparmio sull&apos;intera durata</span><b>{eur(r.risparmioTotaleCliente)}</b></div>
+                  {r.risparmioSuTotalePct != null && (
+                    <div className="ppa-row"><span>Risparmio sul totale della bolletta annua<small>€ {grp(r.spesaAnnuaNetta)} IVA esclusa</small></span><b>{grp(r.risparmioSuTotalePct, 1)} %</b></div>
+                  )}
                 </>
               )}
             </div>
@@ -293,12 +290,30 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1Bolletta
         </>
       )}
 
+      {pronto && (
+        <div className="ppa-extra">
+          <div className="ppa-extra-head">
+            <h3>Energia diurna in F2 e F3 <span className="ppa-tag calc">guadagno aggiuntivo</span></h3>
+            <span className="ppa-extra-flag">Non incluso nei calcoli sopra</span>
+          </div>
+          <div className="ppa-grid4" style={{ marginTop: 10 }}>
+            <div className="ppa-kpi"><div className="v">{grp(r.extraF23Kwh)} kWh</div><div className="l">Energia diurna F2/F3 vendibile<br />(annua)</div></div>
+            <div className="ppa-kpi"><div className="v">{eur(r.tariffa, 3)}</div><div className="l">Nostra tariffa di vendita<br />(€/kWh)</div></div>
+            <div className="ppa-kpi good"><div className="v">{eur(r.extraF23Annuo)}</div><div className="l">Guadagno aggiuntivo<br />annuo</div></div>
+            <div className="ppa-kpi good"><div className="v">{eur(r.extraF23Totale)}</div><div className="l">Guadagno aggiuntivo<br />su {durTxt} anni</div></div>
+          </div>
+          <p className="hint">
+            Consumo diurno del cliente (stessa formula del bilancio diurno/notturno, in base ai giorni lavorativi) meno la fascia F1 già venduta, mese per mese e comunque entro la produzione residua dell&apos;impianto. Valore informativo: non entra in rientro, ricavi, ritorno dell&apos;investimento e guadagno netto. Attenzione: questi kWh sono già conteggiati come immissione GSE nei calcoli principali; rispetto al GSE l&apos;incremento netto sarebbe di {eur(r.extraF23NettoVsGseAnnuo)} all&apos;anno.
+          </p>
+        </div>
+      )}
+
       {Array.isArray(mensile) && mensile.length === 12 && (
         <details className="ppa-details">
           <summary>Dettaglio mensile — F1 vendibile al cliente</summary>
           <div className="ppa-scroll">
             <table className="ppa-table">
-              <thead><tr><th>Mese</th><th className="num">Produzione impianto</th><th className="num">Consumo F1 bolletta</th><th className="num">F1 venduto</th><th className="num">Immesso GSE</th></tr></thead>
+              <thead><tr><th>Mese</th><th className="num">Produzione impianto</th><th className="num">Consumo F1 bolletta</th><th className="num">F1 venduto</th><th className="num">Diurno F2/F3 (extra)</th><th className="num">Immesso GSE</th></tr></thead>
               <tbody>
                 {mensile.map((m) => (
                   <tr key={m.mese}>
@@ -306,6 +321,7 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1Bolletta
                     <td className="num">{grp(m.produzione)}</td>
                     <td className="num">{grp(m.f1)}</td>
                     <td className="num">{grp(m.venduto)}{m.f1 > m.produzione ? " *" : ""}</td>
+                    <td className="num">{grp(m.extraF23 || 0)}</td>
                     <td className="num">{grp(Math.max(0, m.produzione - m.venduto))}</td>
                   </tr>
                 ))}
@@ -314,12 +330,13 @@ export default function PpaSection({ produzioneKwh, autoconsumoF1Kwh, f1Bolletta
                   <td className="num">{grp(mensile.reduce((s, m) => s + m.produzione, 0))}</td>
                   <td className="num">{grp(mensile.reduce((s, m) => s + m.f1, 0))}</td>
                   <td className="num">{grp(mensile.reduce((s, m) => s + m.venduto, 0))}</td>
+                  <td className="num">{grp(mensile.reduce((s, m) => s + (m.extraF23 || 0), 0))}</td>
                   <td className="num">{grp(mensile.reduce((s, m) => s + Math.max(0, m.produzione - m.venduto), 0))}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p className="hint">* mese in cui il consumo F1 supera la produzione: si vende solo la produzione.</p>
+          <p className="hint">* mese in cui il consumo F1 supera la produzione: si vende solo la produzione. La colonna "Diurno F2/F3" è già inclusa nell&apos;immesso GSE (vedi nota sopra).</p>
         </details>
       )}
 

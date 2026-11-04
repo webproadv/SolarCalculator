@@ -607,3 +607,56 @@ a.btn, a.btn:hover { text-decoration: none; }
 .ppa-details{ margin-top:14px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; }
 .ppa-details summary{ cursor:pointer; font-weight:600; font-size:14px; }
 .ppa-scroll{ overflow-x:auto; margin-top:10px; }
+.ppa-row.hl{ background:var(--c-ppa-soft); border-radius:8px; padding:8px 10px; margin:4px -4px; border-bottom:0; }
+.ppa-row small{ display:block; font-size:11.5px; color:var(--ink-faint); }
+.ppa-extra{ margin-top:18px; border:1.5px dashed var(--accent); background:var(--accent-soft); border-radius:14px; padding:14px 16px; }
+.ppa-extra h3{ margin:0; font-size:15px; }
+.ppa-extra-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.ppa-extra-flag{ font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--accent-ink); }
+
+/* ---- PDF "Proposta PPA" (bottone 📄 PPA): stesso documento di stampa, ma si
+   mostra solo questo report (body[data-print="ppa"]) al posto dell'analisi. ---- */
+@media print{
+  .print-report-ppa{ display:none !important; }
+  body[data-print="ppa"] .print-report-ppa{ display:block !important; }
+  body[data-print="ppa"] .print-report:not(.print-report-ppa){ display:none !important; }
+
+  .ppa-pdf-title{ border-bottom-color:#0E7C86 !important; }
+  .ppa-pdf-title .pb-sub{ color:#0E7C86 !important; }
+  .ppa-pdf-box h4{ background:#DCF0F1 !important; color:#0A4F55 !important; border-bottom-color:#B7DDE0 !important; }
+  .ppa-pdf-tag{ background:#0E7C86 !important; }
+
+  .ppa-pdf-adv{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 12px; }
+  .ppa-pdf-card{ border-radius:12px; overflow:hidden; border:1px solid #CFE0D6; break-inside:avoid; }
+  .ppa-pdf-who{ font-family:"Manrope"; font-weight:800; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; padding:8px 14px; color:#fff; }
+  .ppa-pdf-card.cliente .ppa-pdf-who{ background:#0E7C5A; }
+  .ppa-pdf-card.noi .ppa-pdf-who{ background:#0E7C86; }
+  .ppa-pdf-big{ font-family:"Manrope"; font-weight:800; font-size:30px; letter-spacing:-.02em; line-height:1.1; padding:12px 14px 6px; }
+  .ppa-pdf-card.cliente .ppa-pdf-big{ color:#0B3D2E; background:#F4FAF7; }
+  .ppa-pdf-card.noi .ppa-pdf-big{ color:#0A4F55; background:#EAF6F7; }
+  .ppa-pdf-big small{ display:block; font-family:"Inter"; font-size:9.5px; font-weight:600; letter-spacing:0; color:#4B564F; margin-top:2px; }
+  .ppa-pdf-card.cliente .ppa-pdf-rows{ background:#F4FAF7; }
+  .ppa-pdf-card.noi .ppa-pdf-rows{ background:#EAF6F7; }
+  .ppa-pdf-rows{ padding:4px 14px 10px; display:grid; gap:0; }
+  .ppa-pdf-rows div{ display:flex; justify-content:space-between; gap:10px; font-size:10px; padding:5px 0; border-bottom:1px solid rgba(0,0,0,.08); }
+  .ppa-pdf-rows div:last-child{ border-bottom:0; }
+  .ppa-pdf-rows span{ color:#4B564F; }
+  .ppa-pdf-rows b{ font-variant-numeric:tabular-nums; text-align:right; }
+
+  .ppa-pdf-tl{ display:flex; height:26px; border-radius:8px; overflow:hidden; margin-bottom:4px; }
+  .ppa-pdf-tl > div{ display:flex; align-items:center; justify-content:center; color:#fff; font-size:9.5px; font-weight:700; white-space:nowrap; padding:0 6px; }
+  .ppa-pdf-tl .rientro{ background:#0E7C86; }
+  .ppa-pdf-tl .utile{ background:#2F8F5B; }
+  .ppa-pdf-tl .over{ background:#B33B30; }
+  .ppa-chart-print{ width:100%; height:auto; max-height:62mm; display:block; }
+  .ppa-chart-print text{ fill:#7A857D; font-size:11px; font-family:inherit; }
+
+  .ppa-pdf-extra{ margin:14px 0 4px; border:1.5px dashed #B8791F; background:#FEF3DC; border-radius:10px; padding:10px 14px; break-inside:avoid; }
+  .ppa-pdf-extra-head{ display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#3B2706; }
+  .ppa-pdf-extra-head span{ font-size:8.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#6B4712; }
+  .ppa-pdf-extra-body{ display:grid; grid-template-columns:1fr 1fr; gap:4px 26px; margin-top:8px; }
+  .ppa-pdf-extra-body div{ display:flex; justify-content:space-between; font-size:10px; border-bottom:1px solid rgba(107,71,18,.2); padding:3px 0; }
+  .ppa-pdf-extra-body span{ color:#6B4A0E; }
+  .ppa-pdf-month{ font-size:9.5px; }
+  .ppa-pdf-month th, .ppa-pdf-month td{ padding:3px 7px; }
+}
