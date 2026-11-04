@@ -1928,6 +1928,17 @@ function Dashboard({
     tariffaCER: quote.input.tariffaCER,
   });
 
+  const payback = paybackYears({ investimento: costoImpianto, beneficioAnnuo: econ.beneficioTotale });
+  const noleggio = noleggioOperativo({
+    costoImpianto,
+    numeroRate: numeroRateNoleggio,
+    beneficioTotaleAnnuo: econ.beneficioTotale,
+  });
+  // Bolletta residua stimata mese per mese: energia acquistata dalla rete ×
+  // costo medio dell'energia; la somma dei mesi è il valore "Bolletta residua"
+  // usato nel flusso di cassa (noleggio) qui sotto e nel PDF.
+  const bollettaMensile = bollettaResiduaMensile(autoconsumoSim.mesi, econ.prezzoMedio);
+
   const ppaExtraF23Kwh = ppaMensile.reduce((s, m) => s + m.extraF23, 0);
   const ppaR = calcolaPpa({
     modo: ppaIn.modo,
@@ -1942,6 +1953,7 @@ function Dashboard({
     prezzoAttuale: econ.prezzoMedio,
     energiaF23Kwh: ppaExtraF23Kwh,
     spesaAnnuaNetta: econ.spesaAnnuaNetta,
+    bollettaDopoPpaAnnua: bollettaMensile.totale, // bolletta residua con impianto di proprietà (stessa della sezione noleggio)
   });
   const ppaPronto = ppaR.costo > 0;
 
@@ -1968,16 +1980,6 @@ function Dashboard({
     window.setTimeout(ripristina, 60000);
     window.print();
   }
-  const payback = paybackYears({ investimento: costoImpianto, beneficioAnnuo: econ.beneficioTotale });
-  const noleggio = noleggioOperativo({
-    costoImpianto,
-    numeroRate: numeroRateNoleggio,
-    beneficioTotaleAnnuo: econ.beneficioTotale,
-  });
-  // Bolletta residua stimata mese per mese: energia acquistata dalla rete ×
-  // costo medio dell'energia; la somma dei mesi è il valore "Bolletta residua"
-  // usato nel flusso di cassa (noleggio) qui sotto e nel PDF.
-  const bollettaMensile = bollettaResiduaMensile(autoconsumoSim.mesi, econ.prezzoMedio);
   const flusso = flussoCassaNoleggio({
     spesaAnnuaNetta: econ.spesaAnnuaNetta,
     risparmioBolletta: econ.risparmioBolletta,

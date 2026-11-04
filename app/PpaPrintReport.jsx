@@ -18,7 +18,6 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
   const oggi = new Date().toLocaleDateString("it-IT");
   const numeroDocumento = `PPA-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(company.piva || "").slice(-4)}`;
   const durTxt = anniTxt(r.durata);
-  const sconto = r.scontoPct;
   const over = !r.rientraInDurata;
   const tlRientro = over ? 1 : r.anniRientro;
   const tlUtile = over ? 0 : r.anniGuadagno;
@@ -82,18 +81,16 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
               <section className="ppa-pdf-card cliente">
                 <div className="ppa-pdf-who">Vantaggi per il cliente</div>
                 <div className="ppa-pdf-big">
-                  {sconto != null ? `${sconto >= 0 ? "−" : "+"}${grp(Math.abs(sconto), 1)} %` : "—"}
-                  <small>sul prezzo dell&apos;energia F1</small>
+                  {r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—"}
+                  <small>di risparmio annuo in bolletta</small>
                 </div>
                 <div className="ppa-pdf-rows">
                   <div><span>Investimento richiesto</span><b>{r.anticipo > 0 ? `Anticipo ${eur(r.anticipo)}` : "Nessuno (€ 0)"}</b></div>
-                  <div><span>Prezzo attuale → tariffa PPA</span><b>{eur(prezzoMedio, 3)} → {eur(r.tariffa, 3)}</b></div>
-                  <div><span>Tariffa bloccata per</span><b>{durTxt} anni</b></div>
-                  <div><span>Risparmio annuo sull&apos;energia</span><b>{r.risparmioAnnuoCliente != null ? eur(r.risparmioAnnuoCliente) : "—"}</b></div>
-                  <div><span>Risparmio su {durTxt} anni</span><b>{r.risparmioTotaleCliente != null ? eur(r.risparmioTotaleCliente) : "—"}</b></div>
-                  {r.risparmioSuTotalePct != null && (
-                    <div><span>Risparmio sul totale bolletta</span><b>{grp(r.risparmioSuTotalePct, 1)} %</b></div>
-                  )}
+                  <div><span>Spesa annua in bolletta attuale</span><b>{r.spesaAnnuaNetta > 0 ? eur(r.spesaAnnuaNetta) : "—"}</b></div>
+                  <div><span>Spesa annua durante il PPA ({durTxt} anni)</span><b>{r.spesaDuranteAnnua != null ? eur(r.spesaDuranteAnnua) : "—"}</b></div>
+                  <div><span>Risparmio annuo in bolletta</span><b>{r.risparmioAnnuoCliente != null ? eur(r.risparmioAnnuoCliente) : "—"}</b></div>
+                  <div><span>Spesa annua dopo il PPA (impianto suo)</span><b>{r.spesaDopoAnnua != null ? eur(r.spesaDopoAnnua) : "—"}</b></div>
+                  <div><span>Tariffa fissa bloccata per</span><b>{durTxt} anni</b></div>
                 </div>
               </section>
 

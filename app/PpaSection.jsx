@@ -91,7 +91,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
   const over = pronto && !r.rientraInDurata;
   const margineBasso = pronto && r.rientraInDurata && r.anniGuadagno < r.durata / 2 - 0.01;
   const nonConveniente = pronto && prezzoMedio > 0 && r.tariffa >= prezzoMedio;
-  const scontoBasso = pronto && prezzoMedio > 0 && !nonConveniente && r.scontoPct < 5;
+  const scontoBasso = pronto && r.risparmioBollettaPct != null && !nonConveniente && r.risparmioBollettaPct < 3;
 
   const tlRientro = over ? 1 : r.anniRientro;
   const tlUtile = over ? 0 : r.anniGuadagno;
@@ -248,7 +248,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
             <div className="ppa-alert crit">⛔ <div><b>Tariffa non conveniente per il cliente:</b> {eur(r.tariffa, 3)}/kWh è pari o superiore al prezzo medio che paga oggi ({eur(prezzoMedio, 3)}). Difficile da proporre: valuta anticipo, durata maggiore o un costo impianto più basso.</div></div>
           )}
           {scontoBasso && (
-            <div className="ppa-alert warn">⚠️ <div><b>Sconto al cliente basso</b> ({grp(r.scontoPct, 1)} %): potrebbe non bastare a convincerlo.</div></div>
+            <div className="ppa-alert warn">⚠️ <div><b>Risparmio in bolletta basso</b> ({grp(r.risparmioBollettaPct, 1)} %): potrebbe non bastare a convincere il cliente.</div></div>
           )}
 
           <div className="ppa-grid2" style={{ marginTop: 14 }}>
@@ -273,15 +273,15 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
               <div className="ppa-row"><span>Ritorno annuo</span><b>{grp(r.roiAnnuoPct, 1)} %</b></div>
               <div className="ppa-row"><span>Ritorno totale ({durTxt} anni)</span><b>{grp(r.roiTotalePct, 1)} %</b></div>
               <div className="ppa-row"><span>Guadagno netto su costo effettivo</span><b>{grp(r.guadagnoNettoPct, 1)} %</b></div>
-              {prezzoMedio > 0 && (
+              {r.spesaAnnuaNetta > 0 && r.spesaDuranteAnnua != null && (
                 <>
-                  <h3 style={{ marginTop: 16 }}>Lato cliente</h3>
-                  <div className="card-note">Perché il cliente accetta</div>
-                  <div className="ppa-row hl"><span>Risparmio in bolletta sulla quota energia venduta da noi<small>prezzo attuale € {grp(prezzoMedio, 3)} → PPA € {grp(r.tariffa, 3)}/kWh</small></span><b>{r.scontoPct >= 0 ? "−" : "+"}{grp(Math.abs(r.scontoPct), 1)} %</b></div>
-                  <div className="ppa-row"><span>Risparmio annuo sull&apos;energia F1</span><b>{eur(r.risparmioAnnuoCliente)}</b></div>
-                  <div className="ppa-row"><span>Risparmio sull&apos;intera durata</span><b>{eur(r.risparmioTotaleCliente)}</b></div>
-                  {r.risparmioSuTotalePct != null && (
-                    <div className="ppa-row"><span>Risparmio sul totale della bolletta annua<small>€ {grp(r.spesaAnnuaNetta)} IVA esclusa</small></span><b>{grp(r.risparmioSuTotalePct, 1)} %</b></div>
+                  <h3 style={{ marginTop: 16 }}>Lato cliente — spesa in bolletta</h3>
+                  <div className="card-note">Quanto spende il cliente oggi, durante il PPA e dopo (IVA esclusa)</div>
+                  <div className="ppa-row"><span>Spesa annua in bolletta attuale</span><b>{eur(r.spesaAnnuaNetta)}</b></div>
+                  <div className="ppa-row"><span>Spesa annua durante il PPA<small>bolletta residua + energia F1 acquistata da noi · su {durTxt} anni: {eur(r.spesaDuranteTotale)}</small></span><b>{eur(r.spesaDuranteAnnua)}</b></div>
+                  <div className="ppa-row hl"><span>Risparmio annuo in bolletta<small>(spesa attuale − spesa col PPA) ÷ spesa attuale · {eur(r.risparmioAnnuoCliente)} all&apos;anno</small></span><b>{grp(r.risparmioBollettaPct, 1)} %</b></div>
+                  {r.spesaDopoAnnua != null && (
+                    <div className="ppa-row"><span>Spesa annua dopo la scadenza del PPA<small>impianto di proprietà del cliente (bolletta residua della Sezione D) · {grp(r.risparmioDopoPct, 1)} % in meno di oggi</small></span><b>{eur(r.spesaDopoAnnua)}</b></div>
                   )}
                 </>
               )}
