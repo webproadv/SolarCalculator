@@ -1917,6 +1917,17 @@ function Dashboard({
     const extraF23 = Math.max(0, Math.min(Math.round((monthlyDiurno[i] || 0) - f1), produzione - venduto));
     return { mese, produzione, f1, venduto, extraF23 };
   });
+  const ppaF1BollettaKwh = ppaMensile.reduce((s, m) => s + m.f1, 0);
+  const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
+  const econ = economics({
+    spesaAnnua: quote.input.spesaAnnua,
+    consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
+    energiaAutoconsumata: balance.autoconsumata,
+    energiaImmessa: balance.immessa,
+    tariffaGSE: quote.input.tariffaGSE,
+    tariffaCER: quote.input.tariffaCER,
+  });
+
   const ppaExtraF23Kwh = ppaMensile.reduce((s, m) => s + m.extraF23, 0);
   const ppaR = calcolaPpa({
     modo: ppaIn.modo,
@@ -1957,16 +1968,6 @@ function Dashboard({
     window.setTimeout(ripristina, 60000);
     window.print();
   }
-  const ppaF1BollettaKwh = ppaMensile.reduce((s, m) => s + m.f1, 0);
-  const balance = { autoconsumata: autoconsumoSim.totaleAutoconsumo, immessa: autoconsumoSim.totaleImmissione };
-  const econ = economics({
-    spesaAnnua: quote.input.spesaAnnua,
-    consumoAnnuoKwh: quote.input.consumoAnnuoKwh,
-    energiaAutoconsumata: balance.autoconsumata,
-    energiaImmessa: balance.immessa,
-    tariffaGSE: quote.input.tariffaGSE,
-    tariffaCER: quote.input.tariffaCER,
-  });
   const payback = paybackYears({ investimento: costoImpianto, beneficioAnnuo: econ.beneficioTotale });
   const noleggio = noleggioOperativo({
     costoImpianto,
