@@ -81,7 +81,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
             <section className="ppa-pdf-band cliente big">
               <div className="ppa-pdf-band-head">
                 <b>Vantaggi per il cliente</b>
-                <span>Tariffa fissa bloccata per {durTxt} anni</span>
+                <span>{r.anticipo > 0 ? `Anticipo ${eur(r.anticipo)}` : "Nessun anticipo"} · tariffa fissa {eur(r.tariffa, 3)}/kWh per {durTxt} anni</span>
               </div>
               <div className="ppa-pdf-flow">
                 <div className="ppa-pdf-tile">
@@ -114,7 +114,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
             <section className="ppa-pdf-band noi big">
               <div className="ppa-pdf-band-head">
                 <b>Vantaggi per noi</b>
-                <span>Investimento da recuperare {eur(r.daRecuperare)}</span>
+                <span>Costo impianto {eur(r.costo)}{r.anticipo > 0 ? ` − anticipo ${eur(r.anticipo)}` : ""} = da recuperare {eur(r.daRecuperare)}</span>
               </div>
               <div className="ppa-pdf-flow four">
                 <div className="ppa-pdf-tile">
@@ -125,7 +125,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
                 <div className="ppa-pdf-tile">
                   <span className="t">Guadagno netto</span>
                   <span className="v">{eur(r.guadagnoNetto)}</span>
-                  <span className="s">a fine accordo ({durTxt} anni)</span>
+                  <span className="s">{r.guadagnoNettoPct != null ? `${grp(r.guadagnoNettoPct, 1)} % del costo impianto` : ""} · a fine accordo</span>
                 </div>
                 <div className="ppa-pdf-tile hl">
                   <span className="t">Ritorno totale</span>
@@ -150,6 +150,8 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
               </div>
             </section>
 
+            {r.extraF23Annuo > 0 && (
+              <>
             {/* OPPORTUNITÀ AGGIUNTIVA — energia diurna in F2/F3, fuori dai calcoli */}
             <section className="ppa-pdf-band extra big">
               <div className="ppa-pdf-band-head">
@@ -179,6 +181,8 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
                 </div>
               </div>
             </section>
+              </>
+            )}
           </>
         )}
 
