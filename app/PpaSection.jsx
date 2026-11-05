@@ -87,8 +87,8 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
   const T = PPA_TARGET;
   const chips = pronto
     ? [
-        { k: "Sconto sul prezzo dell'energia", v: r.scontoPct != null ? `${grp(r.scontoPct, 1)} %` : "—", t: `obiettivo ${T.risparmioClientePct} %`, ok: r.scontoPct != null && r.scontoPct >= T.risparmioClientePct - 0.5 },
-        { k: "Tariffa di vendita", v: `${grp(r.tariffa, 3)} €/kWh`, t: `ideale ${grp(T.tariffaMin, 2)}–${grp(T.tariffaMax, 2)}`, ok: r.tariffa >= T.tariffaMin - 0.0005 && r.tariffa <= T.tariffaMax + 0.0005 },
+        { k: "Risparmio cliente in bolletta", v: r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—", t: `almeno ${T.risparmioClientePct} %`, ok: r.risparmioBollettaPct != null && r.risparmioBollettaPct >= T.risparmioClientePct - 0.05 },
+        { k: "Tariffa di vendita", v: `${grp(r.tariffa, 3)} €/kWh`, t: `ideale ${grp(T.tariffaMin, 2)}–${grp(T.tariffaMax, 2)}`, ok: r.tariffa <= T.tariffaMax + 0.0005 },
         { k: "Margine nostro finale", v: r.guadagnoNettoPct != null ? `${grp(r.guadagnoNettoPct, 1)} %` : "—", t: `obiettivo ${T.margineNettoPct} % del costo`, ok: r.guadagnoNettoPct != null && r.guadagnoNettoPct >= T.margineNettoPct - 0.05 },
         { k: "Rientro (payback)", v: Number.isFinite(r.anniRientro) ? `${grp(r.anniRientro, 2)} anni` : "—", t: `massimo ${T.paybackMaxAnni} anni`, ok: Number.isFinite(r.anniRientro) && r.anniRientro <= T.paybackMaxAnni + 0.005 },
       ]
@@ -204,10 +204,10 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
           </div>
         )}
         <button type="button" className="ppa-opt" onClick={ottimale} disabled={!(Number(String(costo).replace(",", ".")) > 0)}>
-          ⚡ Configurazione ottimale: sconto 25%, margine 50%, rientro ≤ {T.paybackMaxAnni} anni
+          ⚡ Configurazione ottimale: risparmio cliente ≥ 25%, margine 50%, rientro ≤ {T.paybackMaxAnni} anni
         </button>
         <p className="hint">
-          Si imposta da sola quando inserisci il costo effettivo: tariffa = prezzo attuale −25% (tenuta tra {grp(T.tariffaMin, 2)} e {grp(T.tariffaMax, 2)} €/kWh); se con quella tariffa margine e rientro non bastano, calcola l&apos;<b>anticipo minimo</b> del cliente che li raggiunge. Puoi poi modificare tariffa, anticipo e durata a mano; il pulsante riapplica i valori ottimali.
+          Si imposta da sola quando inserisci il costo effettivo: tariffa = la più alta che dà al cliente almeno il {T.risparmioClientePct}% di risparmio in bolletta (massimo {grp(T.tariffaMax, 2)} €/kWh, può quindi scendere sotto {grp(T.tariffaMin, 2)}); poi calcola l&apos;<b>anticipo minimo</b> del cliente che porta il margine finale al {T.margineNettoPct}% e il rientro entro {T.paybackMaxAnni} anni. Puoi poi modificare tariffa, anticipo e durata a mano; il pulsante riapplica i valori ottimali.
         </p>
       </div>
 
@@ -227,7 +227,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
           <div className="ppa-roi-box">
             <div className="l">Ritorno totale dell&apos;investimento</div>
             <div className="v">{r.roiTotalePct != null ? `${grp(r.roiTotalePct, 1)} %` : "—"}</div>
-            <div className="s">((ricavo totale {eur(r.ricavoTotale)} ÷ spese {eur(r.costo)}) − 1) × 100</div>
+            <div className="s">(((ricavo totale {eur(r.ricavoTotale)}{r.anticipo > 0 ? ` + anticipo ${eur(r.anticipo)}` : ""}) ÷ spese {eur(r.costo)}) − 1) × 100</div>
           </div>
           <div className="ppa-roi-box">
             <div className="l">Ritorno annuo dell&apos;investimento</div>
@@ -290,7 +290,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
 
           <div className="ppa-grid2" style={{ marginTop: 14 }}>
             <div className="card">
-              <h3>Ricavi</h3>
+              <h3>Lato azienda — Ricavi</h3>
               <div className="card-note">Annui e sull&apos;intera durata</div>
               <table className="ppa-table">
                 <thead><tr><th></th><th className="num">Annuo</th><th className="num">Totale {durTxt} anni</th></tr></thead>
@@ -305,21 +305,19 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
               </table>
             </div>
             <div className="card">
-              <h3>Ritorno dell&apos;investimento</h3>
-              <div className="card-note">Ricavo ÷ costo effettivo impianto</div>
-              <div className="ppa-row hl"><span>Ritorno totale ({durTxt} anni)<small>((ricavo totale ÷ spese) − 1) × 100</small></span><b>{grp(r.roiTotalePct, 1)} %</b></div>
-              <div className="ppa-row hl"><span>Ritorno annuo<small>ritorno totale ÷ {durTxt} anni</small></span><b>{grp(r.roiAnnuoPct, 1)} %</b></div>
-              {r.spesaAnnuaNetta > 0 && r.spesaDuranteAnnua != null && (
+              <h3>Lato cliente — Vantaggi</h3>
+              <div className="card-note">Quanto spende il cliente oggi, durante il PPA e dopo (IVA esclusa)</div>
+              {r.spesaAnnuaNetta > 0 && r.spesaDuranteAnnua != null ? (
                 <>
-                  <h3 style={{ marginTop: 16 }}>Lato cliente — spesa in bolletta</h3>
-                  <div className="card-note">Quanto spende il cliente oggi, durante il PPA e dopo (IVA esclusa)</div>
                   <div className="ppa-row"><span>Spesa annua in bolletta attuale</span><b>{eur(r.spesaAnnuaNetta)}</b></div>
                   <div className="ppa-row"><span>Spesa annua durante il PPA<small>bolletta residua + energia F1 acquistata da noi · su {durTxt} anni: {eur(r.spesaDuranteTotale)}</small></span><b>{eur(r.spesaDuranteAnnua)}</b></div>
-                  <div className="ppa-row hl"><span>Risparmio annuo in bolletta<small>(spesa attuale − spesa col PPA) ÷ spesa attuale · {eur(r.risparmioAnnuoCliente)} all&apos;anno</small></span><b>{grp(r.risparmioBollettaPct, 1)} %</b></div>
+                  <div className="ppa-row hl green"><span>Risparmio annuo in bolletta<small>spesa attuale − spesa col PPA</small></span><b>{eur(r.risparmioAnnuoCliente)}<small className="pct">{grp(r.risparmioBollettaPct, 1)} % della bolletta</small></b></div>
                   {r.spesaDopoAnnua != null && (
                     <div className="ppa-row"><span>Spesa annua dopo la scadenza del PPA<small>impianto di proprietà del cliente (bolletta residua della Sezione D) · {grp(r.risparmioDopoPct, 1)} % in meno di oggi</small></span><b>{eur(r.spesaDopoAnnua)}</b></div>
                   )}
                 </>
+              ) : (
+                <p className="hint">Servono la spesa in bolletta e il prezzo medio dell&apos;energia per mostrare i vantaggi del cliente.</p>
               )}
             </div>
           </div>

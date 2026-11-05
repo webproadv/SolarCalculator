@@ -836,3 +836,6 @@ a.btn, a.btn:hover { text-decoration: none; }
 .ppa-chip.ok{ background:var(--c-good-soft); border-color:var(--c-good); }
 .ppa-chip.ko{ background:var(--warn-soft); border-color:var(--warn); }
 .ppa-opt:disabled{ opacity:.5; cursor:not-allowed; }
+.ppa-row.hl.green{ background:var(--c-good-soft); box-shadow:inset 0 0 0 1.5px var(--c-good); }
+.ppa-row.hl.green b{ color:var(--c-good); text-align:right; }
+.ppa-row b small.pct{ display:block; font-family:inherit; font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-top:2px; }

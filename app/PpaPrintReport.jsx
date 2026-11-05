@@ -98,8 +98,8 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
                 <div className="ppa-pdf-arrow" aria-hidden="true">→</div>
                 <div className="ppa-pdf-tile hl">
                   <span className="t">Risparmio annuo in bolletta</span>
-                  <span className="v">{r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—"}</span>
-                  <span className="s">{r.risparmioAnnuoCliente != null ? `${eur(r.risparmioAnnuoCliente)} all'anno` : ""}</span>
+                  <span className="v">{r.risparmioAnnuoCliente != null ? eur(r.risparmioAnnuoCliente) : "—"}</span>
+                  <span className="s">{r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} % della bolletta` : ""}</span>
                 </div>
                 <div className="ppa-pdf-arrow" aria-hidden="true">→</div>
                 <div className="ppa-pdf-tile">
@@ -201,7 +201,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
 
         {pronto && (
           <>
-            <h3 className="pr-h3">Ricavi e guadagno per noi</h3>
+            <h3 className="pr-h3">Lato azienda — Ricavi</h3>
             <table className="pr-table">
               <thead><tr><th></th><th className="num">Annuo</th><th className="num">Totale {durTxt} anni</th></tr></thead>
               <tbody>
@@ -214,14 +214,14 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
               </tbody>
             </table>
 
-            <h3 className="pr-h3 cliente">Spesa in bolletta del cliente</h3>
+            <h3 className="pr-h3 cliente">Lato cliente — Vantaggi</h3>
             <table className="pr-table ppa-pdf-cli">
               <thead><tr><th></th><th className="num">Annuo</th><th className="num">Totale {durTxt} anni</th></tr></thead>
               <tbody>
                 <tr><td>Bolletta attuale (x)</td><td className="num">{eur(r.spesaAnnuaNetta)}</td><td className="num">{eur(r.spesaAnnuaNetta * r.durata)}</td></tr>
                 <tr><td>− Risparmio sull&apos;energia F1 acquistata da noi ({prezzoMedio > 0 ? `${eur(prezzoMedio, 3)}` : "prezzo attuale"} → {eur(r.tariffa, 3)}/kWh)</td><td className="num">{r.risparmioAnnuoCliente != null ? `− ${eur(r.risparmioAnnuoCliente)}` : "—"}</td><td className="num">{r.risparmioTotaleCliente != null ? `− ${eur(r.risparmioTotaleCliente)}` : "—"}</td></tr>
                 <tr className="total"><td>Spesa durante il PPA (y)</td><td className="num">{r.spesaDuranteAnnua != null ? eur(r.spesaDuranteAnnua) : "—"}</td><td className="num">{r.spesaDuranteTotale != null ? eur(r.spesaDuranteTotale) : "—"}</td></tr>
-                <tr><td>Risparmio annuo in bolletta = (x − y) ÷ x</td><td className="num">{r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} %` : "—"}</td><td className="num"></td></tr>
+                <tr><td>Risparmio annuo in bolletta (x − y) · {r.risparmioBollettaPct != null ? `${grp(r.risparmioBollettaPct, 1)} % di x` : ""}</td><td className="num">{r.risparmioAnnuoCliente != null ? eur(r.risparmioAnnuoCliente) : "—"}</td><td className="num">{r.risparmioTotaleCliente != null ? eur(r.risparmioTotaleCliente) : ""}</td></tr>
                 <tr><td>Spesa dopo la scadenza del PPA (impianto del cliente)</td><td className="num">{r.spesaDopoAnnua != null ? eur(r.spesaDopoAnnua) : "—"}</td><td className="num"></td></tr>
               </tbody>
             </table>
@@ -262,7 +262,7 @@ export default function PpaPrintReport({ company, quote, r, prezzoMedio, kwp, pr
         )}
 
         <p className="pr-note ppa-p2-notes">
-          Energia F1 venduta = somma dei 12 mesi del minore tra produzione dell&apos;impianto e consumo F1 in bolletta; immissione GSE = produzione − F1 venduta. Opportunità F2/F3: energia diurna oltre F1 × (tariffa di vendita − tariffa GSE), esclusa da rientro, ricavi, ritorno e guadagno netto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno totale = ((ricavo totale ÷ costo effettivo impianto) − 1) × 100; ritorno annuo = ritorno totale ÷ anni dell&apos;accordo. Valori IVA esclusa, indicativi e non vincolanti.
+          Energia F1 venduta = somma dei 12 mesi del minore tra produzione dell&apos;impianto e consumo F1 in bolletta; immissione GSE = produzione − F1 venduta. Opportunità F2/F3: energia diurna oltre F1 × (tariffa di vendita − tariffa GSE), esclusa da rientro, ricavi, ritorno e guadagno netto. Tempo di rientro = (costo effettivo − anticipo) ÷ ricavo annuo. Ritorno totale = (((ricavo totale + anticipo) ÷ costo effettivo impianto) − 1) × 100; ritorno annuo = ritorno totale ÷ anni dell&apos;accordo. Valori IVA esclusa, indicativi e non vincolanti.
         </p>
 
         <div className="ppa-pageno">Pagina 2 di 2</div>
