@@ -1,6 +1,6 @@
 "use client";
 
-import { PPA_DEFAULTS } from "../lib/ppa";
+import { PPA_DEFAULTS, PPA_TARGET } from "../lib/ppa";
 
 // Sezione F — Vendita energia in modalità PPA (vedi lib/ppa.js per le formule).
 // Dati automatici dall'analisi (produzione, autoconsumo F1, prezzo medio) in
@@ -62,7 +62,7 @@ export function PpaChart({ r, print = false, compact = false }) {
   );
 }
 
-export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKwh, mensile, prezzoMedio, costoListino }) {
+export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKwh, mensile, prezzoMedio, costoListino, onAuto }) {
   const { modo, costo, anticipo, tariffa, durata, anni, gse } = inp;
   const mk = (k) => (v) => setInp((p) => ({ ...p, [k]: v }));
   const setModo = mk("modo"), setCosto = mk("costo"), setAnticipo = mk("anticipo"), setTariffa = mk("tariffa");
@@ -80,16 +80,25 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
     if (m === 2 && pronto && Number.isFinite(r.anniRientro)) setAnni(Math.min(r.anniRientro, 99).toFixed(1));
     setModo(m);
   };
-  const ottimale = () => {
-    setAnni(((Number(String(durata).replace(",", ".")) || PPA_DEFAULTS.durataAnni) / 2).toFixed(1));
-    setModo(2);
-  };
+  // Configurazione ottimale (25% sconto, margine 50%, rientro ≤ 3 anni): imposta
+  // tariffa e anticipo in automatico partendo dal costo; poi tutto resta modificabile.
+  const ottimale = () => onAuto && onAuto(costo);
+  const cambiaCosto = (v) => (onAuto ? onAuto(v) : setCosto(v));
+  const T = PPA_TARGET;
+  const chips = pronto
+    ? [
+        { k: "Sconto sul prezzo dell'energia", v: r.scontoPct != null ? `${grp(r.scontoPct, 1)} %` : "—", t: `obiettivo ${T.risparmioClientePct} %`, ok: r.scontoPct != null && r.scontoPct >= T.risparmioClientePct - 0.5 },
+        { k: "Tariffa di vendita", v: `${grp(r.tariffa, 3)} €/kWh`, t: `ideale ${grp(T.tariffaMin, 2)}–${grp(T.tariffaMax, 2)}`, ok: r.tariffa >= T.tariffaMin - 0.0005 && r.tariffa <= T.tariffaMax + 0.0005 },
+        { k: "Margine nostro finale", v: r.guadagnoNettoPct != null ? `${grp(r.guadagnoNettoPct, 1)} %` : "—", t: `obiettivo ${T.margineNettoPct} % del costo`, ok: r.guadagnoNettoPct != null && r.guadagnoNettoPct >= T.margineNettoPct - 0.05 },
+        { k: "Rientro (payback)", v: Number.isFinite(r.anniRientro) ? `${grp(r.anniRientro, 2)} anni` : "—", t: `massimo ${T.paybackMaxAnni} anni`, ok: Number.isFinite(r.anniRientro) && r.anniRientro <= T.paybackMaxAnni + 0.005 },
+      ]
+    : [];
 
   const tariffaValue = modo === 2 ? (pronto ? r.tariffa.toFixed(3) : "") : tariffa;
   const anniValue = modo === 1 ? (pronto && Number.isFinite(r.anniRientro) ? Math.min(r.anniRientro, 99).toFixed(2) : "") : anni;
 
   const over = pronto && !r.rientraInDurata;
-  const margineBasso = pronto && r.rientraInDurata && r.anniGuadagno < r.durata / 2 - 0.01;
+  const margineBasso = pronto && r.rientraInDurata && r.anniRientro > T.paybackMaxAnni + 0.005;
   const nonConveniente = pronto && prezzoMedio > 0 && r.tariffa >= prezzoMedio;
   const scontoBasso = pronto && r.risparmioBollettaPct != null && !nonConveniente && r.risparmioBollettaPct < 3;
 
@@ -109,7 +118,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
           <div className="card-note">I valori che inserisci a mano</div>
           <div className="field">
             <label>Costo effettivo impianto (€)</label>
-            <input type="number" min="0" step="100" inputMode="decimal" placeholder="es. 42000" value={costo} onChange={(e) => setCosto(e.target.value)} />
+            <input type="number" min="0" step="100" inputMode="decimal" placeholder="es. 42000" value={costo} onChange={(e) => cambiaCosto(e.target.value)} />
             <p className="hint">Il costo reale per noi (più basso del prezzo di listino){costoListino > 0 ? ` — listino proposto in Sezione C: ${eur(costoListino)}` : ""}.</p>
           </div>
           <div className="field">
@@ -183,10 +192,23 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
               onChange={(e) => setAnni(e.target.value)} aria-label="Anni di rientro" />
           </div>
         </div>
-        <button type="button" className="ppa-opt" onClick={ottimale}>
-          ⚡ Configurazione ottimale: rientro in metà durata ({anniTxt((Number(String(durata).replace(",", ".")) || 5) / 2)} su {durTxt} anni)
+        {chips.length > 0 && (
+          <div className="ppa-targets">
+            {chips.map((c) => (
+              <div key={c.k} className={`ppa-chip ${c.ok ? "ok" : "ko"}`}>
+                <span className="k">{c.ok ? "✓" : "!"} {c.k}</span>
+                <b>{c.v}</b>
+                <span className="t">{c.t}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <button type="button" className="ppa-opt" onClick={ottimale} disabled={!(Number(String(costo).replace(",", ".")) > 0)}>
+          ⚡ Configurazione ottimale: sconto 25%, margine 50%, rientro ≤ {T.paybackMaxAnni} anni
         </button>
-        <p className="hint">Ottimale = rientro in metà della durata, così l&apos;altra metà è tutta di guadagno. Passa alla modalità &quot;anni → tariffa&quot; e calcola la tariffa necessaria.</p>
+        <p className="hint">
+          Si imposta da sola quando inserisci il costo effettivo: tariffa = prezzo attuale −25% (tenuta tra {grp(T.tariffaMin, 2)} e {grp(T.tariffaMax, 2)} €/kWh); se con quella tariffa margine e rientro non bastano, calcola l&apos;<b>anticipo minimo</b> del cliente che li raggiunge. Puoi poi modificare tariffa, anticipo e durata a mano; il pulsante riapplica i valori ottimali.
+        </p>
       </div>
 
       <h4 className="ppa-sec">Risultato</h4>
@@ -251,7 +273,7 @@ export default function PpaSection({ inp, setInp, r, produzioneKwh, f1BollettaKw
             <div className="ppa-alert crit">⛔ <div><b>Non rientri entro la durata.</b> Servirebbe una tariffa di almeno {eur(r.tariffaMinima, 3)}/kWh per rientrare in {durTxt} anni.</div></div>
           )}
           {margineBasso && (
-            <div className="ppa-alert warn">⚠️ <div><b>Margine ridotto:</b> il rientro occupa più di metà della durata ({anniTxt(r.anniRientro)} su {durTxt} anni). Obiettivo: massimo {anniTxt(r.durata / 2)}.</div></div>
+            <div className="ppa-alert warn">⚠️ <div><b>Margine ridotto:</b> il rientro è di {anniTxt(r.anniRientro)} anni su {durTxt}. Obiettivo: massimo {anniTxt(T.paybackMaxAnni)} anni.</div></div>
           )}
           {!over && !margineBasso && (
             <div className="ppa-alert ok">✅ <div><b>Obiettivo rispettato:</b> rientro in {anniTxt(r.anniRientro)} anni, {anniTxt(r.anniGuadagno)} anni di guadagno.</div></div>

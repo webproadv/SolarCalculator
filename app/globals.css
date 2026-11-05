@@ -825,3 +825,14 @@ a.btn, a.btn:hover { text-decoration: none; }
   body[data-print="ppa"]{ margin:0 !important; padding:0 !important; min-height:0 !important; height:auto !important; }
   body[data-print="ppa"] .wrap{ min-height:0 !important; height:auto !important; }
 }
+
+/* ---- PPA: obiettivi della configurazione ottimale ---- */
+.ppa-targets{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px; }
+@media (max-width:760px){ .ppa-targets{ grid-template-columns:1fr 1fr; } }
+.ppa-chip{ border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; border:1.5px solid; }
+.ppa-chip .k{ font-size:11.5px; font-weight:700; }
+.ppa-chip b{ font-family:"IBM Plex Mono"; font-size:20px; line-height:1.2; }
+.ppa-chip .t{ font-size:11.5px; opacity:.8; }
+.ppa-chip.ok{ background:var(--c-good-soft); border-color:var(--c-good); }
+.ppa-chip.ko{ background:var(--warn-soft); border-color:var(--warn); }
+.ppa-opt:disabled{ opacity:.5; cursor:not-allowed; }

@@ -9,7 +9,7 @@ import OrientamentoDial from "./OrientamentoDial";
 import RoofPlanner from "./RoofPlanner";
 import PpaSection from "./PpaSection";
 import PpaPrintReport from "./PpaPrintReport";
-import { calcolaPpa, PPA_DEFAULTS } from "../lib/ppa";
+import { calcolaPpa, configurazioneOttimale, PPA_DEFAULTS } from "../lib/ppa";
 import {
   DEFAULTS,
   diurnoNotturno,
@@ -1988,6 +1988,27 @@ function Dashboard({
     window.setTimeout(ripristina, 60000);
     window.print();
   }
+  // Configurazione ottimale PPA: appena si inserisce il costo effettivo (o si preme
+  // "⚡ Configurazione ottimale") si impostano tariffa (sconto 25% sul prezzo dell'energia,
+  // forchetta 0,20–0,22) e anticipo minimo per avere margine ≥ 50% e rientro ≤ 3 anni.
+  // Tutto resta poi modificabile a mano.
+  function ppaAutoImposta(costoVal) {
+    const c = Number(String(costoVal).replace(",", "."));
+    if (!(c > 0)) {
+      setPpaIn((p) => ({ ...p, costo: costoVal }));
+      return;
+    }
+    const o = configurazioneOttimale({
+      costo: c,
+      durata: ppaIn.durata,
+      f1Kwh: ppaR.f1Kwh,
+      immessoKwh: ppaR.immessoKwh,
+      prezzoAttuale: econ.prezzoMedio,
+      spesaAnnuaNetta: econ.spesaAnnuaNetta,
+      tariffaGse: ppaIn.gse,
+    });
+    setPpaIn((p) => ({ ...p, costo: costoVal, modo: 1, tariffa: o.tariffa.toFixed(3), anticipo: String(o.anticipo) }));
+  }
   const flusso = flussoCassaNoleggio({
     spesaAnnuaNetta: econ.spesaAnnuaNetta,
     risparmioBolletta: econ.risparmioBolletta,
@@ -2586,6 +2607,7 @@ function Dashboard({
           mensile={ppaMensile}
           prezzoMedio={econ.prezzoMedio}
           costoListino={costoImpianto}
+          onAuto={ppaAutoImposta}
         />
       )}
 
